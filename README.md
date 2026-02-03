@@ -21,7 +21,7 @@ docker compose up --build
 3. Verify services:
 
 - Backend health: `http://localhost:8000/health`
-- Frontend UI: `http://localhost:5173`
+- Frontend UI (via nginx): `http://localhost`
 
 4. Logs:
 
@@ -75,6 +75,10 @@ Market hours:
 Benchmark symbols:
 
 - Ensure `NIFTY_SYMBOL=NIFTY` and `BANKNIFTY_SYMBOL=BANKNIFTY` (Groww trading symbols for the indices).
+
+Scoring + signals:
+
+- See `docs/SCORES.md` for the exact calculations and interpretation.
 
 ## 5) How To Use The App
 
@@ -131,6 +135,8 @@ cd frontend
 npm install
 npm run dev
 ```
+
+Frontend dev server: `http://localhost:5173`
 
 Run backend against dockerized DB/Redis:
 
