@@ -147,6 +147,30 @@ Mock Groww locally:
 - Place a reverse proxy (nginx/Caddy) in front of the backend if exposing publicly.
 - Production cadence should be tuned to stay within Groww rate limits.
 
+## 9) EC2 Runbook (Single Instance, Docker Compose)
+
+1. SSH into your EC2 instance.
+2. Ensure Docker + Compose are installed.
+3. Clone the repo into `/home/ubuntu/india_market_python`.
+4. Export your Groww key for the session:
+
+```bash
+export GROWW_API_KEY="your-groww-key"
+```
+
+5. Run the deploy script (pulls `main`, builds with `--no-cache`, restarts):
+
+```bash
+cd /home/ubuntu/india_market_python
+./deploy.sh
+```
+
+If you prefer not to export, pass the key directly:
+
+```bash
+./deploy.sh "your-groww-key"
+```
+
 ## Architecture
 
 - `backend/app/domain`: indicator math, alignment, universes
