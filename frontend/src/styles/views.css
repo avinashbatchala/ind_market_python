@@ -11,9 +11,11 @@
 
 .controls {
   display: grid;
-  grid-template-columns: 140px 160px repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
   gap: 12px;
   align-content: start;
+  align-items: stretch;
+  grid-auto-rows: 1fr;
 }
 
 .filters-bar {
@@ -24,11 +26,22 @@
   background: rgba(13, 18, 24, 0.8);
 }
 
-.controls label {
+.filter-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(15, 20, 26, 0.6);
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 110px;
+}
+
+.filter-title {
   font-size: 12px;
   color: var(--muted);
-  display: grid;
-  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .range-group {
@@ -38,6 +51,7 @@
   background: rgba(15, 20, 26, 0.6);
   display: grid;
   gap: 10px;
+  min-height: 110px;
 }
 
 .range-group.compact {
@@ -140,8 +154,22 @@
 
 .card-body {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.card-body > div {
+  min-width: 0;
+}
+
+.card-body .metric {
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.card-body h3 {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
 }
 
 .table {
@@ -418,7 +446,7 @@
 
 @media (max-width: 1200px) {
   .controls {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -429,5 +457,61 @@
   }
   .row span:nth-child(n + 4) {
     display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .benchmarks {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .card-body {
+    grid-template-columns: 1fr;
+  }
+
+  .table {
+    overflow-x: auto;
+  }
+
+  .grid {
+    min-width: 520px;
+  }
+
+  .manage-table {
+    overflow-x: auto;
+  }
+
+  .manage-row {
+    min-width: 640px;
+  }
+}
+
+@media (max-width: 720px) {
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-card,
+  .range-group {
+    min-height: unset;
+  }
+
+  .scores-hero,
+  .hero {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 520px) {
+  .table {
+    padding: 12px;
+  }
+
+  .row {
+    padding: 8px 10px;
   }
 }

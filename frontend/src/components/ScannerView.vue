@@ -10,14 +10,14 @@
 
     <section class="filters-bar">
       <div class="controls">
-        <label>
-          Timeframe
+        <div class="filter-card">
+          <span class="filter-title">Timeframe</span>
           <select v-model="timeframeModel">
             <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
           </select>
-        </label>
-        <label>
-          Signal
+        </div>
+        <div class="filter-card">
+          <span class="filter-title">Signal</span>
           <select v-model="signalModel">
             <option value="ALL">All</option>
             <option value="TRIGGER_LONG">Trigger Long</option>
@@ -26,7 +26,7 @@
             <option value="NEUTRAL">Neutral</option>
             <option value="EXIT/AVOID">Exit/Avoid</option>
           </select>
-        </label>
+        </div>
         <div class="range-group compact">
           <div class="range-head">
             <p class="range-title">RRS</p>
