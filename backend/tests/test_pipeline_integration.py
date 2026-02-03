@@ -91,13 +91,19 @@ class MemoryWatchIndexRepo:
     def get_active_symbols(self):
         return [self.symbol]
 
+    def get_active_mappings(self):
+        return {self.symbol: self.symbol}
+
+    def get_active_data_symbols(self):
+        return [self.symbol]
+
 
 class MemoryTickerIndexRepo:
     def __init__(self, symbol):
         self.symbol = symbol
 
-    def get_mapping(self):
-        return {"TCS": self.symbol}
+    def get_mappings(self):
+        return {"TCS": [self.symbol]}
 
     def get_index_symbols(self):
         return [self.symbol]

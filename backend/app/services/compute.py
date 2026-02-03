@@ -51,16 +51,16 @@ class ComputeService:
         benchmark_states: List[dict] = []
         benchmark_data: Dict[str, Dict[str, np.ndarray]] = {}
 
-        base_benchmarks = set(self.settings.benchmark_symbols_list())
-        watch_indices = set(self.watch_index_repo.get_active_symbols())
-        benchmarks = base_benchmarks | watch_indices
+        index_map = self.watch_index_repo.get_active_mappings()
+        if not index_map:
+            index_map = {self.settings.nifty_symbol: self.settings.nifty_symbol}
 
-        for benchmark in sorted(benchmarks):
-            data = self._load_candles(benchmark, timeframe)
+        for benchmark, data_symbol in sorted(index_map.items()):
+            data = self._load_candles(data_symbol, timeframe)
             if data is None:
                 self.logger.warning(
                     "Missing benchmark candles",
-                    extra={"timeframe": timeframe, "benchmark": benchmark},
+                    extra={"timeframe": timeframe, "benchmark": benchmark, "data_symbol": data_symbol},
                 )
                 benchmark_states.append(
                     {
@@ -77,7 +77,7 @@ class ComputeService:
 
         symbols = self._symbols()
         rows: List[dict] = []
-        mapping = self.ticker_index_repo.get_mapping()
+        mapping = self.ticker_index_repo.get_mappings()
 
         for symbol in symbols:
             sym_data = self._load_candles(symbol, timeframe)
@@ -85,14 +85,21 @@ class ComputeService:
                 self.logger.warning("Missing symbol candles", extra={"symbol": symbol, "timeframe": timeframe})
                 continue
 
-            benchmark_symbol = mapping.get(symbol, self.settings.nifty_symbol)
+            index_symbols = mapping.get(symbol, [])
+            benchmark_symbol = self._select_benchmark_symbol(index_symbols)
+            data_symbol = index_map.get(benchmark_symbol, benchmark_symbol)
             benchmark = benchmark_data.get(benchmark_symbol)
             if benchmark is None:
-                benchmark = self._load_candles(benchmark_symbol, timeframe)
+                benchmark = self._load_candles(data_symbol, timeframe)
                 if benchmark is None:
                     self.logger.warning(
                         "Missing benchmark for symbol",
-                        extra={"symbol": symbol, "benchmark": benchmark_symbol, "timeframe": timeframe},
+                        extra={
+                            "symbol": symbol,
+                            "benchmark": benchmark_symbol,
+                            "data_symbol": data_symbol,
+                            "timeframe": timeframe,
+                        },
                     )
                     continue
                 benchmark_data[benchmark_symbol] = benchmark
@@ -226,6 +233,15 @@ class ComputeService:
 
     def _symbols(self) -> List[str]:
         return self.watch_stock_repo.get_active_symbols()
+
+    def _select_benchmark_symbol(self, index_symbols: List[str]) -> str:
+        default_symbol = self.settings.nifty_symbol
+        if not index_symbols:
+            return default_symbol
+        for symbol in index_symbols:
+            if symbol != default_symbol:
+                return symbol
+        return default_symbol
 
     def _load_candles(self, symbol: str, timeframe: str) -> Optional[Dict[str, np.ndarray]]:
         payload = self.cache.get_json(f"candles:{symbol}:{timeframe}")

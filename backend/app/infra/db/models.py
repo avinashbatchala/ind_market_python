@@ -91,6 +91,7 @@ class WatchIndex(Base):
 
     id = Column(Integer, primary_key=True)
     symbol = Column(String, nullable=False, unique=True)
+    data_symbol = Column(String, nullable=True)
     name = Column(String, nullable=True)
     active = Column(Boolean, nullable=False, default=True)
 
@@ -107,7 +108,7 @@ class TickerIndex(Base):
     index_symbol = Column(String, ForeignKey("watch_indices.symbol", ondelete="CASCADE"), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("stock_symbol", name="ux_ticker_index_stock"),
+        UniqueConstraint("stock_symbol", "index_symbol", name="ux_ticker_index_stock_index"),
         Index("ix_ticker_index_stock_symbol", "stock_symbol"),
         Index("ix_ticker_index_index_symbol", "index_symbol"),
     )

@@ -40,7 +40,7 @@ class WatchStockBase(BaseModel):
     symbol: str
     name: str | None = None
     active: bool = True
-    industry_index_symbol: str | None = None
+    industry_index_symbols: List[str] = []
 
 
 class WatchStockCreate(WatchStockBase):
@@ -51,7 +51,7 @@ class WatchStockUpdate(BaseModel):
     symbol: str | None = None
     name: str | None = None
     active: bool | None = None
-    industry_index_symbol: str | None = None
+    industry_index_symbols: List[str] | None = None
 
 
 class WatchStock(WatchStockBase):
@@ -60,6 +60,7 @@ class WatchStock(WatchStockBase):
 
 class WatchIndexBase(BaseModel):
     symbol: str
+    data_symbol: str | None = None
     name: str | None = None
     active: bool = True
 
@@ -70,6 +71,7 @@ class WatchIndexCreate(WatchIndexBase):
 
 class WatchIndexUpdate(BaseModel):
     symbol: str | None = None
+    data_symbol: str | None = None
     name: str | None = None
     active: bool | None = None
 

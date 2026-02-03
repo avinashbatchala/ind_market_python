@@ -95,11 +95,9 @@ class IngestionService:
 
     def _symbols(self) -> List[str]:
         stock_symbols = self.watch_stock_repo.get_active_symbols()
-        index_symbols = self.watch_index_repo.get_active_symbols()
-        mapped_indices = self.ticker_index_repo.get_index_symbols()
+        index_symbols = self.watch_index_repo.get_active_data_symbols()
         symbols = set(stock_symbols)
         symbols.update(index_symbols)
-        symbols.update(mapped_indices)
         symbols.update(self.settings.benchmark_symbols_list())
         return sorted(symbols)
 

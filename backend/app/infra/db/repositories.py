@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.infra.db.models import (
@@ -233,19 +233,24 @@ class WatchStockRepository:
                     TickerIndex.index_symbol,
                 )
                 .outerjoin(TickerIndex, WatchStock.symbol == TickerIndex.stock_symbol)
-                .order_by(WatchStock.symbol.asc())
+                .order_by(WatchStock.symbol.asc(), TickerIndex.index_symbol.asc())
             )
             rows = session.execute(stmt).all()
-        return [
-            {
-                "id": row.id,
-                "symbol": row.symbol,
-                "name": row.name,
-                "active": row.active,
-                "industry_index_symbol": row.index_symbol,
-            }
-            for row in rows
-        ]
+        grouped: dict[int, dict] = {}
+        for row in rows:
+            item = grouped.get(row.id)
+            if item is None:
+                item = {
+                    "id": row.id,
+                    "symbol": row.symbol,
+                    "name": row.name,
+                    "active": row.active,
+                    "industry_index_symbols": [],
+                }
+                grouped[row.id] = item
+            if row.index_symbol:
+                item["industry_index_symbols"].append(row.index_symbol)
+        return list(grouped.values())
 
     def create(self, symbol: str, name: Optional[str], active: bool) -> WatchStock:
         with self.db.session() as session:
@@ -324,6 +329,7 @@ class WatchIndexRepository:
                 select(
                     WatchIndex.id,
                     WatchIndex.symbol,
+                    WatchIndex.data_symbol,
                     WatchIndex.name,
                     WatchIndex.active,
                 )
@@ -334,15 +340,16 @@ class WatchIndexRepository:
             {
                 "id": row.id,
                 "symbol": row.symbol,
+                "data_symbol": row.data_symbol,
                 "name": row.name,
                 "active": row.active,
             }
             for row in rows
         ]
 
-    def create(self, symbol: str, name: Optional[str], active: bool) -> WatchIndex:
+    def create(self, symbol: str, name: Optional[str], active: bool, data_symbol: Optional[str] = None) -> WatchIndex:
         with self.db.session() as session:
-            index = WatchIndex(symbol=symbol, name=name, active=active)
+            index = WatchIndex(symbol=symbol, name=name, active=active, data_symbol=data_symbol)
             session.add(index)
             session.flush()
             return index
@@ -351,13 +358,42 @@ class WatchIndexRepository:
         with self.db.session() as session:
             return session.get(WatchIndex, index_id)
 
-    def update(self, index_id: int, symbol: Optional[str], name: Optional[str], active: Optional[bool]) -> WatchIndex:
+    def get_fields(self, index_id: int) -> Optional[dict]:
+        with self.db.session() as session:
+            stmt = select(
+                WatchIndex.id,
+                WatchIndex.symbol,
+                WatchIndex.data_symbol,
+                WatchIndex.name,
+                WatchIndex.active,
+            ).where(WatchIndex.id == index_id)
+            row = session.execute(stmt).first()
+        if row is None:
+            return None
+        return {
+            "id": row.id,
+            "symbol": row.symbol,
+            "data_symbol": row.data_symbol,
+            "name": row.name,
+            "active": row.active,
+        }
+
+    def update(
+        self,
+        index_id: int,
+        symbol: Optional[str],
+        name: Optional[str],
+        active: Optional[bool],
+        data_symbol: Optional[str],
+    ) -> WatchIndex:
         with self.db.session() as session:
             index = session.get(WatchIndex, index_id)
             if index is None:
                 raise ValueError("Index not found")
             if symbol is not None:
                 index.symbol = symbol
+            if data_symbol is not None:
+                index.data_symbol = data_symbol
             if name is not None:
                 index.name = name
             if active is not None:
@@ -378,6 +414,21 @@ class WatchIndexRepository:
             rows = session.execute(stmt).scalars().all()
         return list(rows)
 
+    def get_active_mappings(self) -> dict:
+        with self.db.session() as session:
+            stmt = select(
+                WatchIndex.symbol,
+                WatchIndex.data_symbol,
+            ).where(WatchIndex.active.is_(True))
+            rows = session.execute(stmt).all()
+        return {row.symbol: (row.data_symbol or row.symbol) for row in rows}
+
+    def get_active_data_symbols(self) -> List[str]:
+        with self.db.session() as session:
+            stmt = select(WatchIndex.data_symbol, WatchIndex.symbol).where(WatchIndex.active.is_(True))
+            rows = session.execute(stmt).all()
+        return [row.data_symbol or row.symbol for row in rows]
+
     def exists(self, symbol: str) -> bool:
         with self.db.session() as session:
             stmt = (
@@ -391,7 +442,7 @@ class WatchIndexRepository:
         cleaned = [s.strip().upper() for s in symbols if s.strip()]
         if not cleaned:
             return
-        rows = [{"symbol": symbol, "active": True} for symbol in cleaned]
+        rows = [{"symbol": symbol, "data_symbol": symbol, "active": True} for symbol in cleaned]
         stmt = pg_insert(WatchIndex).values(rows)
         stmt = stmt.on_conflict_do_nothing(index_elements=["symbol"])
         with self.db.session() as session:
@@ -402,33 +453,86 @@ class TickerIndexRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    def set_mapping(self, stock_symbol: str, index_symbol: str) -> None:
-        with self.db.session() as session:
-            stmt = select(TickerIndex).where(TickerIndex.stock_symbol == stock_symbol)
-            mapping = session.execute(stmt).scalar_one_or_none()
-            if mapping is None:
-                mapping = TickerIndex(stock_symbol=stock_symbol, index_symbol=index_symbol)
-                session.add(mapping)
-            else:
-                mapping.index_symbol = index_symbol
+    def set_mappings(self, stock_symbol: str, index_symbols: List[str]) -> None:
+        cleaned = []
+        seen = set()
+        for symbol in index_symbols:
+            if not symbol:
+                continue
+            if symbol in seen:
+                continue
+            cleaned.append(symbol)
+            seen.add(symbol)
 
-    def clear_mapping(self, stock_symbol: str) -> None:
         with self.db.session() as session:
-            stmt = select(TickerIndex).where(TickerIndex.stock_symbol == stock_symbol)
-            mapping = session.execute(stmt).scalar_one_or_none()
-            if mapping is not None:
-                session.delete(mapping)
+            existing = set(
+                session.execute(
+                    select(TickerIndex.index_symbol).where(TickerIndex.stock_symbol == stock_symbol)
+                ).scalars()
+            )
+            desired = set(cleaned)
+            to_remove = existing - desired
+            to_add = desired - existing
 
-    def get_mapping(self) -> dict:
+            if to_remove:
+                session.execute(
+                    delete(TickerIndex).where(
+                        TickerIndex.stock_symbol == stock_symbol,
+                        TickerIndex.index_symbol.in_(to_remove),
+                    )
+                )
+
+            if to_add:
+                rows = [{"stock_symbol": stock_symbol, "index_symbol": symbol} for symbol in to_add]
+                stmt = pg_insert(TickerIndex).values(rows)
+                stmt = stmt.on_conflict_do_nothing(
+                    index_elements=["stock_symbol", "index_symbol"],
+                )
+                session.execute(stmt)
+
+    def ensure_mapping(self, stock_symbol: str, index_symbol: str) -> None:
+        if not stock_symbol or not index_symbol:
+            return
         with self.db.session() as session:
-            stmt = select(TickerIndex.stock_symbol, TickerIndex.index_symbol)
+            stmt = pg_insert(TickerIndex).values(
+                {"stock_symbol": stock_symbol, "index_symbol": index_symbol}
+            )
+            stmt = stmt.on_conflict_do_nothing(index_elements=["stock_symbol", "index_symbol"])
+            session.execute(stmt)
+
+    def clear_mappings(self, stock_symbol: str) -> None:
+        with self.db.session() as session:
+            session.execute(delete(TickerIndex).where(TickerIndex.stock_symbol == stock_symbol))
+
+    def get_mappings(self) -> dict:
+        with self.db.session() as session:
+            stmt = select(TickerIndex.stock_symbol, TickerIndex.index_symbol).order_by(
+                TickerIndex.stock_symbol.asc(),
+                TickerIndex.index_symbol.asc(),
+            )
             rows = session.execute(stmt).all()
-        return {stock: index for stock, index in rows}
+        mapping: dict[str, List[str]] = {}
+        for stock, index in rows:
+            mapping.setdefault(stock, []).append(index)
+        return mapping
 
-    def get_index_for_stock(self, stock_symbol: str) -> Optional[str]:
+    def get_indices_for_stock(self, stock_symbol: str) -> List[str]:
         with self.db.session() as session:
-            stmt = select(TickerIndex.index_symbol).where(TickerIndex.stock_symbol == stock_symbol)
-            return session.execute(stmt).scalar_one_or_none()
+            stmt = (
+                select(TickerIndex.index_symbol)
+                .where(TickerIndex.stock_symbol == stock_symbol)
+                .order_by(TickerIndex.index_symbol.asc())
+            )
+            return list(session.execute(stmt).scalars().all())
+
+    def move_stock_symbol(self, old_symbol: str, new_symbol: str) -> None:
+        if old_symbol == new_symbol:
+            return
+        with self.db.session() as session:
+            stmt = select(TickerIndex).where(TickerIndex.stock_symbol == old_symbol)
+            rows = session.execute(stmt).scalars().all()
+            for row in rows:
+                row.stock_symbol = new_symbol
 
     def move_index_symbol(self, old_symbol: str, new_symbol: str) -> None:
         with self.db.session() as session:
