@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     nifty_symbol: str = Field("NIFTY", alias="NIFTY_SYMBOL")
     banknifty_symbol: str = Field("BANKNIFTY", alias="BANKNIFTY_SYMBOL")
+    benchmark_symbols: str = Field("", alias="BENCHMARK_SYMBOLS")
 
     rate_limit_per_sec: int = Field(10, alias="RATE_LIMIT_PER_SEC")
     rate_limit_per_min: int = Field(300, alias="RATE_LIMIT_PER_MIN")
@@ -47,3 +48,11 @@ class Settings(BaseSettings):
 
     def market_days_list(self) -> List[str]:
         return [d.strip().upper() for d in self.market_days.split(",") if d.strip()]
+
+    def benchmark_symbols_list(self) -> List[str]:
+        symbols = [self.nifty_symbol, self.banknifty_symbol]
+        extra = [s.strip() for s in self.benchmark_symbols.split(",") if s.strip()]
+        for symbol in extra:
+            if symbol not in symbols:
+                symbols.append(symbol)
+        return symbols

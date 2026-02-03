@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import numpy as np
 
 # -----------------------------
@@ -113,19 +113,18 @@ class ScreenResult:
     rrs: float
     rrv: float
     rve: float
-    score: int
     signal: str
 
-def classify(rrs_val, rrv_val, rve_val, rrs_series) -> Tuple[int, str]:
-    score = int(rve_val > 0) + int(rrv_val > 0) + int(rrs_val > 0)
-
+def classify(rrs_val, rrv_val, rve_val, rrs_series) -> str:
     if crosses_up(rrs_series, 0.0) and rrv_val > 0 and rve_val > 0:
-        return score, "TRIGGER_LONG"
+        return "TRIGGER_LONG"
+    if crosses_down(rrs_series, 0.0) and rrv_val < 0 and rve_val < 0:
+        return "TRIGGER_SHORT"
     if rve_val > 0 and rrv_val > 0 and rrs_val < 0 and (rrs_series[-1] > rrs_series[-2]):
-        return score, "WATCH"
+        return "WATCH"
     if crosses_down(rrs_series, 0.0) or rve_val < 0 or rrv_val < 0:
-        return score, "EXIT/AVOID"
-    return score, "NEUTRAL"
+        return "EXIT/AVOID"
+    return "NEUTRAL"
 
 # -----------------------------
 # You plug in Groww historical fetch here
@@ -159,11 +158,17 @@ def run_screener(universe: List[str], bench: str, timeframe: str = "5m", bars: i
         rrv_val = float(rrv_series[-1])
         rve_val = float(rve_series[-1])
 
-        score, sig = classify(rrs_val, rrv_val, rve_val, rrs_series)
+        sig = classify(rrs_val, rrv_val, rve_val, rrs_series)
 
-        results.append(ScreenResult(sym, rrs_val, rrv_val, rve_val, score, sig))
+        results.append(ScreenResult(sym, rrs_val, rrv_val, rve_val, sig))
 
-    # rank: signal first, then score, then RVE (pressure)
-    sig_rank = {"TRIGGER_LONG": 0, "WATCH": 1, "NEUTRAL": 2, "EXIT/AVOID": 3}
-    results.sort(key=lambda r: (sig_rank.get(r.signal, 9), -r.score, -r.rve))
+    # rank: signal first, then strength of move
+    sig_rank = {
+        "TRIGGER_LONG": 0,
+        "TRIGGER_SHORT": 1,
+        "WATCH": 2,
+        "NEUTRAL": 3,
+        "EXIT/AVOID": 4,
+    }
+    results.sort(key=lambda r: (sig_rank.get(r.signal, 9), -abs(r.rrs), -abs(r.rve)))
     return results

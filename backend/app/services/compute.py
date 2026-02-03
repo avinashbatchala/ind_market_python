@@ -9,9 +9,15 @@ from app.core.config import Settings
 from app.core.logging import get_logger
 from app.domain.alignment import align_ohlcv
 from app.domain.indicators.rrs_rrv_rve import classify, rrs, rrv, rve
-from app.domain.universe import NIFTY_50, BANK_UNIVERSE
 from app.infra.cache.redis_cache import RedisCache
-from app.infra.db.repositories import CandleRepository, SnapshotRepository, BenchmarkRepository
+from app.infra.db.repositories import (
+    CandleRepository,
+    SnapshotRepository,
+    BenchmarkRepository,
+    WatchStockRepository,
+    WatchIndexRepository,
+    TickerIndexRepository,
+)
 from app.services.benchmarks import compute_benchmark_state
 
 
@@ -24,6 +30,9 @@ class ComputeService:
         benchmark_repo: BenchmarkRepository,
         cache: RedisCache,
         broadcaster,
+        watch_stock_repo: WatchStockRepository,
+        watch_index_repo: WatchIndexRepository,
+        ticker_index_repo: TickerIndexRepository,
     ) -> None:
         self.settings = settings
         self.candle_repo = candle_repo
@@ -31,27 +40,44 @@ class ComputeService:
         self.benchmark_repo = benchmark_repo
         self.cache = cache
         self.broadcaster = broadcaster
+        self.watch_stock_repo = watch_stock_repo
+        self.watch_index_repo = watch_index_repo
+        self.ticker_index_repo = ticker_index_repo
         self.logger = get_logger(self.__class__.__name__)
 
     def compute_timeframe(self, timeframe: str) -> None:
         now = datetime.now(timezone.utc)
 
-        nifty = self._load_candles(self.settings.nifty_symbol, timeframe)
-        bank = self._load_candles(self.settings.banknifty_symbol, timeframe)
-        if nifty is None or bank is None:
-            self.logger.warning(
-                "Missing benchmark candles",
-                extra={"timeframe": timeframe, "nifty": nifty is not None, "bank": bank is not None},
-            )
-            return
+        benchmark_states: List[dict] = []
+        benchmark_data: Dict[str, Dict[str, np.ndarray]] = {}
 
-        benchmark_states = [
-            compute_benchmark_state(self.settings.nifty_symbol, nifty),
-            compute_benchmark_state(self.settings.banknifty_symbol, bank),
-        ]
+        base_benchmarks = set(self.settings.benchmark_symbols_list())
+        watch_indices = set(self.watch_index_repo.get_active_symbols())
+        benchmarks = base_benchmarks | watch_indices
 
-        symbols = sorted(set(NIFTY_50) | set(BANK_UNIVERSE))
+        for benchmark in sorted(benchmarks):
+            data = self._load_candles(benchmark, timeframe)
+            if data is None:
+                self.logger.warning(
+                    "Missing benchmark candles",
+                    extra={"timeframe": timeframe, "benchmark": benchmark},
+                )
+                benchmark_states.append(
+                    {
+                        "benchmark": benchmark,
+                        "regime": "NO_DATA",
+                        "trend": 0.0,
+                        "vol_expansion": 0.0,
+                        "participation": 0.0,
+                    }
+                )
+                continue
+            benchmark_data[benchmark] = data
+            benchmark_states.append(compute_benchmark_state(benchmark, data))
+
+        symbols = self._symbols()
         rows: List[dict] = []
+        mapping = self.ticker_index_repo.get_mapping()
 
         for symbol in symbols:
             sym_data = self._load_candles(symbol, timeframe)
@@ -59,16 +85,34 @@ class ComputeService:
                 self.logger.warning("Missing symbol candles", extra={"symbol": symbol, "timeframe": timeframe})
                 continue
 
-            row = self._compute_symbol(symbol, timeframe, sym_data, nifty, bank)
+            benchmark_symbol = mapping.get(symbol, self.settings.nifty_symbol)
+            benchmark = benchmark_data.get(benchmark_symbol)
+            if benchmark is None:
+                benchmark = self._load_candles(benchmark_symbol, timeframe)
+                if benchmark is None:
+                    self.logger.warning(
+                        "Missing benchmark for symbol",
+                        extra={"symbol": symbol, "benchmark": benchmark_symbol, "timeframe": timeframe},
+                    )
+                    continue
+                benchmark_data[benchmark_symbol] = benchmark
+
+            row = self._compute_symbol(symbol, timeframe, sym_data, benchmark, benchmark_symbol)
             if row is not None:
                 rows.append(row)
 
-        sig_rank = {"TRIGGER_LONG": 0, "WATCH": 1, "NEUTRAL": 2, "EXIT/AVOID": 3}
+        sig_rank = {
+            "TRIGGER_LONG": 0,
+            "TRIGGER_SHORT": 1,
+            "WATCH": 2,
+            "NEUTRAL": 3,
+            "EXIT/AVOID": 4,
+        }
         rows.sort(
             key=lambda r: (
-                sig_rank.get(r["best_signal"], 9),
-                -max(r["score_vs_nifty"], r["score_vs_bank"]),
-                -max(r["rve_vs_nifty"], r["rve_vs_bank"]),
+                sig_rank.get(r["signal"], 9),
+                -abs(r["rrs"]),
+                -abs(r["rve"]),
             )
         )
 
@@ -115,30 +159,34 @@ class ComputeService:
         symbol: str,
         timeframe: str,
         sym_data: Dict[str, np.ndarray],
-        nifty: Dict[str, np.ndarray],
-        bank: Dict[str, np.ndarray],
+        benchmark: Dict[str, np.ndarray],
+        benchmark_symbol: str,
     ) -> Optional[dict]:
-        sym_vs_nifty = self._compute_vs_benchmark(symbol, sym_data, nifty)
-        sym_vs_bank = self._compute_vs_benchmark(symbol, sym_data, bank)
-        if sym_vs_nifty is None or sym_vs_bank is None:
+        sym_vs_benchmark = self._compute_vs_benchmark(symbol, sym_data, benchmark)
+        if sym_vs_benchmark is None:
             return None
 
-        best_signal = self._best_signal(sym_vs_nifty["signal"], sym_vs_bank["signal"])
+        signal = sym_vs_benchmark["signal"]
 
         return {
             "symbol": symbol,
             "timeframe": timeframe,
-            "rrs_vs_nifty": sym_vs_nifty["rrs"],
-            "rrv_vs_nifty": sym_vs_nifty["rrv"],
-            "rve_vs_nifty": sym_vs_nifty["rve"],
-            "score_vs_nifty": sym_vs_nifty["score"],
-            "signal_vs_nifty": sym_vs_nifty["signal"],
-            "rrs_vs_bank": sym_vs_bank["rrs"],
-            "rrv_vs_bank": sym_vs_bank["rrv"],
-            "rve_vs_bank": sym_vs_bank["rve"],
-            "score_vs_bank": sym_vs_bank["score"],
-            "signal_vs_bank": sym_vs_bank["signal"],
-            "best_signal": best_signal,
+            "benchmark_symbol": benchmark_symbol,
+            "rrs": sym_vs_benchmark["rrs"],
+            "rrv": sym_vs_benchmark["rrv"],
+            "rve": sym_vs_benchmark["rve"],
+            "signal": signal,
+            "rrs_vs_nifty": sym_vs_benchmark["rrs"],
+            "rrv_vs_nifty": sym_vs_benchmark["rrv"],
+            "rve_vs_nifty": sym_vs_benchmark["rve"],
+            "score_vs_nifty": 0,
+            "signal_vs_nifty": signal,
+            "rrs_vs_bank": 0.0,
+            "rrv_vs_bank": 0.0,
+            "rve_vs_bank": 0.0,
+            "score_vs_bank": 0,
+            "signal_vs_bank": "NEUTRAL",
+            "best_signal": signal,
         }
 
     def _compute_vs_benchmark(
@@ -166,22 +214,18 @@ class ComputeService:
         rrv_val = float(rrv_series[-1])
         rve_val = float(rve_series[-1])
 
-        score, signal = classify(rrs_val, rrv_val, rve_val, rrs_series)
+        signal = classify(rrs_val, rrv_val, rve_val, rrs_series)
 
         return {
             "symbol": symbol,
             "rrs": rrs_val,
             "rrv": rrv_val,
             "rve": rve_val,
-            "score": score,
             "signal": signal,
         }
 
-    def _best_signal(self, nifty_signal: str, bank_signal: str) -> str:
-        priority = {"TRIGGER_LONG": 0, "WATCH": 1, "NEUTRAL": 2, "EXIT/AVOID": 3}
-        if priority.get(nifty_signal, 9) <= priority.get(bank_signal, 9):
-            return nifty_signal
-        return bank_signal
+    def _symbols(self) -> List[str]:
+        return self.watch_stock_repo.get_active_symbols()
 
     def _load_candles(self, symbol: str, timeframe: str) -> Optional[Dict[str, np.ndarray]]:
         payload = self.cache.get_json(f"candles:{symbol}:{timeframe}")

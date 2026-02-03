@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Index
+from sqlalchemy import Column, DateTime, Float, Integer, String, Index, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -48,6 +48,7 @@ class ScannerSnapshot(Base):
     signal_vs_bank = Column(String, nullable=False)
 
     best_signal = Column(String, nullable=False)
+    benchmark_symbol = Column(String, nullable=False, default="NIFTY")
 
     __table_args__ = (
         Index("ix_snapshot_symbol_timeframe_ts", "symbol", "timeframe", "ts"),
@@ -69,4 +70,44 @@ class BenchmarkState(Base):
 
     __table_args__ = (
         Index("ix_benchmark_timeframe_ts", "benchmark", "timeframe", "ts"),
+    )
+
+
+class WatchStock(Base):
+    __tablename__ = "watch_stocks"
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=True)
+    active = Column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        Index("ix_watch_stocks_symbol", "symbol"),
+    )
+
+
+class WatchIndex(Base):
+    __tablename__ = "watch_indices"
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=True)
+    active = Column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        Index("ix_watch_indices_symbol", "symbol"),
+    )
+
+
+class TickerIndex(Base):
+    __tablename__ = "ticker_index"
+
+    id = Column(Integer, primary_key=True)
+    stock_symbol = Column(String, ForeignKey("watch_stocks.symbol", ondelete="CASCADE"), nullable=False)
+    index_symbol = Column(String, ForeignKey("watch_indices.symbol", ondelete="CASCADE"), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("stock_symbol", name="ux_ticker_index_stock"),
+        Index("ix_ticker_index_stock_symbol", "stock_symbol"),
+        Index("ix_ticker_index_index_symbol", "index_symbol"),
     )

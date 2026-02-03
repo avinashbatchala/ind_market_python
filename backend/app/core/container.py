@@ -6,7 +6,14 @@ from typing import Optional
 from app.core.config import Settings
 from app.infra.cache.redis_cache import RedisCache
 from app.infra.db.session import Database
-from app.infra.db.repositories import CandleRepository, SnapshotRepository, BenchmarkRepository
+from app.infra.db.repositories import (
+    CandleRepository,
+    SnapshotRepository,
+    BenchmarkRepository,
+    WatchStockRepository,
+    WatchIndexRepository,
+    TickerIndexRepository,
+)
 from app.infra.groww.client import GrowwClientFactory, GrowwClient
 from app.services.broadcaster import Broadcaster
 from app.services.compute import ComputeService
@@ -23,6 +30,9 @@ class Container:
     candle_repo: CandleRepository
     snapshot_repo: SnapshotRepository
     benchmark_repo: BenchmarkRepository
+    watch_stock_repo: WatchStockRepository
+    watch_index_repo: WatchIndexRepository
+    ticker_index_repo: TickerIndexRepository
     redis_cache: RedisCache
     rate_limiter: RateLimiter
     retry_policy: RetryPolicy
@@ -36,6 +46,7 @@ class Container:
         import asyncio
         self.redis_cache.connect()
         self.broadcaster.set_loop(asyncio.get_running_loop())
+        self.watch_index_repo.ensure_defaults(self.settings.benchmark_symbols_list())
         self.scheduler.start()
 
     async def stop(self) -> None:
@@ -54,6 +65,9 @@ def build_container() -> Container:
     candle_repo = CandleRepository(db)
     snapshot_repo = SnapshotRepository(db)
     benchmark_repo = BenchmarkRepository(db)
+    watch_stock_repo = WatchStockRepository(db)
+    watch_index_repo = WatchIndexRepository(db)
+    ticker_index_repo = TickerIndexRepository(db)
 
     redis_cache = RedisCache(settings.redis_url)
     rate_limiter = RateLimiter(
@@ -72,6 +86,9 @@ def build_container() -> Container:
         cache=redis_cache,
         rate_limiter=rate_limiter,
         retry_policy=retry_policy,
+        watch_stock_repo=watch_stock_repo,
+        watch_index_repo=watch_index_repo,
+        ticker_index_repo=ticker_index_repo,
     )
 
     compute_service = ComputeService(
@@ -81,6 +98,9 @@ def build_container() -> Container:
         benchmark_repo=benchmark_repo,
         cache=redis_cache,
         broadcaster=broadcaster,
+        watch_stock_repo=watch_stock_repo,
+        watch_index_repo=watch_index_repo,
+        ticker_index_repo=ticker_index_repo,
     )
 
     scheduler = Scheduler(
@@ -95,6 +115,9 @@ def build_container() -> Container:
         candle_repo=candle_repo,
         snapshot_repo=snapshot_repo,
         benchmark_repo=benchmark_repo,
+        watch_stock_repo=watch_stock_repo,
+        watch_index_repo=watch_index_repo,
+        ticker_index_repo=ticker_index_repo,
         redis_cache=redis_cache,
         rate_limiter=rate_limiter,
         retry_policy=retry_policy,

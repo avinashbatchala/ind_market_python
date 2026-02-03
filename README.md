@@ -75,17 +75,21 @@ Market hours:
 Benchmark symbols:
 
 - Ensure `NIFTY_SYMBOL=NIFTY` and `BANKNIFTY_SYMBOL=BANKNIFTY` (Groww trading symbols for the indices).
+- Optional: `BENCHMARK_SYMBOLS` can add more index cards (comma-separated trading symbols).
+- Watchlists and stock-to-index mapping are managed via the **Manage lists** page in the UI.
 
-Scoring + signals:
+Signals + indicators:
 
-- See `docs/SCORES.md` for the exact calculations and interpretation.
+- See `docs/SCORES.md` for calculations, signals, and filter guidance.
 
 ## 5) How To Use The App
 
 - Open UI at `http://localhost:5173`.
 - Select a timeframe (5m/15m/1h/1d).
+- Use **Manage lists** to add stocks, indices, and map each stock to its industry index.
 - Signals:
 - `TRIGGER_LONG`: RRS crosses up + RRV/RVE positive.
+- `TRIGGER_SHORT`: RRS crosses down + RRV/RVE negative.
 - `WATCH`: RRV/RVE positive, RRS rising but below zero.
 - `NEUTRAL`: no clear signal.
 - `EXIT/AVOID`: RRS crosses down or RRV/RVE negative.

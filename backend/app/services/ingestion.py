@@ -8,8 +8,7 @@ import numpy as np
 
 from app.core.config import Settings
 from app.core.logging import get_logger
-from app.domain.universe import NIFTY_50, BANK_UNIVERSE
-from app.infra.db.repositories import CandleRepository
+from app.infra.db.repositories import CandleRepository, WatchStockRepository, WatchIndexRepository, TickerIndexRepository
 from app.infra.cache.redis_cache import RedisCache
 from app.infra.groww.client import GrowwClient, TIMEFRAME_INTERVALS
 from app.services.rate_limit import RateLimiter
@@ -26,6 +25,9 @@ class IngestionService:
         cache: RedisCache,
         rate_limiter: RateLimiter,
         retry_policy: RetryPolicy,
+        watch_stock_repo: WatchStockRepository,
+        watch_index_repo: WatchIndexRepository,
+        ticker_index_repo: TickerIndexRepository,
     ) -> None:
         self.settings = settings
         self.groww_client = groww_client
@@ -33,6 +35,9 @@ class IngestionService:
         self.cache = cache
         self.rate_limiter = rate_limiter
         self.retry_policy = retry_policy
+        self.watch_stock_repo = watch_stock_repo
+        self.watch_index_repo = watch_index_repo
+        self.ticker_index_repo = ticker_index_repo
         self.logger = get_logger(self.__class__.__name__)
 
     def run_once(self, timeframe: str) -> None:
@@ -89,9 +94,13 @@ class IngestionService:
         self.logger.info("Ingestion complete", extra={"timeframe": timeframe})
 
     def _symbols(self) -> List[str]:
-        symbols = set(NIFTY_50) | set(BANK_UNIVERSE)
-        symbols.add(self.settings.nifty_symbol)
-        symbols.add(self.settings.banknifty_symbol)
+        stock_symbols = self.watch_stock_repo.get_active_symbols()
+        index_symbols = self.watch_index_repo.get_active_symbols()
+        mapped_indices = self.ticker_index_repo.get_index_symbols()
+        symbols = set(stock_symbols)
+        symbols.update(index_symbols)
+        symbols.update(mapped_indices)
+        symbols.update(self.settings.benchmark_symbols_list())
         return sorted(symbols)
 
     @staticmethod

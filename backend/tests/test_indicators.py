@@ -27,6 +27,10 @@ def test_rolling_move():
 
 
 def test_classify_basic():
-    score, signal = classify(1.0, 1.0, 1.0, np.array([-1.0, 1.0]))
-    assert score == 3
+    signal = classify(1.0, 1.0, 1.0, np.array([-1.0, 1.0]))
     assert signal == "TRIGGER_LONG"
+
+
+def test_classify_trigger_short():
+    signal = classify(-1.0, -1.0, -1.0, np.array([1.0, -1.0]))
+    assert signal == "TRIGGER_SHORT"

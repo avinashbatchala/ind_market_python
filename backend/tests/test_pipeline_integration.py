@@ -79,6 +79,30 @@ class MemoryBenchmarkRepo:
         return None
 
 
+class MemoryWatchStockRepo:
+    def get_active_symbols(self):
+        return ["TCS"]
+
+
+class MemoryWatchIndexRepo:
+    def __init__(self, symbol):
+        self.symbol = symbol
+
+    def get_active_symbols(self):
+        return [self.symbol]
+
+
+class MemoryTickerIndexRepo:
+    def __init__(self, symbol):
+        self.symbol = symbol
+
+    def get_mapping(self):
+        return {"TCS": self.symbol}
+
+    def get_index_symbols(self):
+        return [self.symbol]
+
+
 def test_pipeline_end_to_end():
     settings = Settings()
     settings.ingest_bars = 50
@@ -91,6 +115,9 @@ def test_pipeline_end_to_end():
         cache=MemoryCache(),
         rate_limiter=RateLimiter(1000, 1000),
         retry_policy=RetryPolicy(1, 0.01, 0.01),
+        watch_stock_repo=MemoryWatchStockRepo(),
+        watch_index_repo=MemoryWatchIndexRepo(settings.nifty_symbol),
+        ticker_index_repo=MemoryTickerIndexRepo(settings.nifty_symbol),
     )
 
     cache = ingestion.cache
@@ -101,6 +128,9 @@ def test_pipeline_end_to_end():
         benchmark_repo=MemoryBenchmarkRepo(),
         cache=cache,
         broadcaster=None,
+        watch_stock_repo=MemoryWatchStockRepo(),
+        watch_index_repo=MemoryWatchIndexRepo(settings.nifty_symbol),
+        ticker_index_repo=MemoryTickerIndexRepo(settings.nifty_symbol),
     )
 
     ingestion.run_once("5m")

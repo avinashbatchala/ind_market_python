@@ -7,17 +7,11 @@ from pydantic import BaseModel
 class ScannerRow(BaseModel):
     symbol: str
     timeframe: str
-    rrs_vs_nifty: float
-    rrv_vs_nifty: float
-    rve_vs_nifty: float
-    score_vs_nifty: int
-    signal_vs_nifty: str
-    rrs_vs_bank: float
-    rrv_vs_bank: float
-    rve_vs_bank: float
-    score_vs_bank: int
-    signal_vs_bank: str
-    best_signal: str
+    benchmark_symbol: str
+    rrs: float
+    rrv: float
+    rve: float
+    signal: str
 
 
 class ScannerResponse(BaseModel):
@@ -40,3 +34,45 @@ class BenchmarksResponse(BaseModel):
     timeframe: str
     ts: str
     states: List[BenchmarkState]
+
+
+class WatchStockBase(BaseModel):
+    symbol: str
+    name: str | None = None
+    active: bool = True
+    industry_index_symbol: str | None = None
+
+
+class WatchStockCreate(WatchStockBase):
+    pass
+
+
+class WatchStockUpdate(BaseModel):
+    symbol: str | None = None
+    name: str | None = None
+    active: bool | None = None
+    industry_index_symbol: str | None = None
+
+
+class WatchStock(WatchStockBase):
+    id: int
+
+
+class WatchIndexBase(BaseModel):
+    symbol: str
+    name: str | None = None
+    active: bool = True
+
+
+class WatchIndexCreate(WatchIndexBase):
+    pass
+
+
+class WatchIndexUpdate(BaseModel):
+    symbol: str | None = None
+    name: str | None = None
+    active: bool | None = None
+
+
+class WatchIndex(WatchIndexBase):
+    id: int
