@@ -118,6 +118,7 @@ export GROWW_KEY_INPUT
 export GROWW_SECRET_INPUT
 python3 - "$ENV_FILE" <<'PY'
 from pathlib import Path
+import os
 import sys
 
 env_path = Path(sys.argv[1])
