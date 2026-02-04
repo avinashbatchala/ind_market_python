@@ -677,6 +677,18 @@
   padding: 18px;
 }
 
+.score-code {
+  background: rgba(12, 18, 24, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  color: var(--muted);
+  margin: 12px 0;
+}
+
 .score-card h3,
 .score-block h3,
 .score-footnote h3 {
