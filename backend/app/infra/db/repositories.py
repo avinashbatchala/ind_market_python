@@ -60,6 +60,41 @@ class CandleRepository:
             rows = session.execute(stmt).scalars().all()
         return list(reversed(rows))
 
+    def get_latest_candles_batch(self, symbols: List[str], timeframe: str, limit: int) -> dict[str, List[Candle]]:
+        if not symbols:
+            return {}
+        with self.db.session() as session:
+            row_number = func.row_number().over(
+                partition_by=Candle.symbol,
+                order_by=Candle.ts.desc(),
+            ).label("rn")
+            subq = (
+                select(Candle, row_number)
+                .where(Candle.symbol.in_(symbols), Candle.timeframe == timeframe)
+                .subquery()
+            )
+            stmt = (
+                select(subq)
+                .where(subq.c.rn <= limit)
+                .order_by(subq.c.symbol.asc(), subq.c.ts.asc())
+            )
+            rows = session.execute(stmt).all()
+        grouped: dict[str, List[Candle]] = {}
+        for row in rows:
+            candle = Candle(
+                symbol=row.symbol,
+                timeframe=row.timeframe,
+                ts=row.ts,
+                open=row.open,
+                high=row.high,
+                low=row.low,
+                close=row.close,
+                volume=row.volume,
+                source=row.source,
+            )
+            grouped.setdefault(row.symbol, []).append(candle)
+        return grouped
+
 
 class SnapshotRepository:
     def __init__(self, db: Database) -> None:

@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.schemas import (
     BenchmarksResponse,
     ScannerResponse,
+    LiveDataResponse,
+    ExpiriesResponse,
+    RelativeMetricsResponse,
     WatchStock,
     WatchStockCreate,
     WatchStockUpdate,
@@ -15,6 +18,8 @@ from app.api.schemas import (
     WatchIndexUpdate,
 )
 from app.core.container import get_container, Container
+from app.services.groww_live_data import GrowwLiveDataService
+from app.services.relative_metrics import RelativeMetricsService
 
 router = APIRouter()
 
@@ -76,6 +81,70 @@ def get_benchmarks(
         raise HTTPException(status_code=404, detail="Benchmark data not available")
 
     return BenchmarksResponse(**payload)
+
+
+@router.get("/stocks/{symbol}/live", response_model=LiveDataResponse)
+def get_stock_live(
+    symbol: str,
+    exchange: str = Query(None),
+    segment: str = Query(None),
+    expiry: str | None = Query(None),
+    option_type: str | None = Query(None),
+    underlying: str | None = Query(None),
+    trading_symbol: str | None = Query(None),
+    expiry_date: str | None = Query(None),
+    container: Container = Depends(container_dep),
+) -> LiveDataResponse:
+    service = GrowwLiveDataService(container.settings, container.groww_client)
+    payload = service.fetch_live(
+        symbol=symbol.strip().upper(),
+        exchange=(exchange or container.settings.groww_exchange).upper(),
+        segment=(segment or container.settings.groww_segment).upper(),
+        expiry=expiry,
+        option_type=option_type,
+        underlying=underlying,
+        trading_symbol=trading_symbol,
+        expiry_date=expiry_date,
+    )
+    return LiveDataResponse(**payload)
+
+
+@router.get("/stocks/{symbol}/relative-metrics", response_model=RelativeMetricsResponse)
+def get_stock_relative_metrics(
+    symbol: str,
+    interval: str = Query("5m"),
+    lookback: int = Query(None),
+    container: Container = Depends(container_dep),
+) -> RelativeMetricsResponse:
+    if lookback is None:
+        lookback = container.settings.compute_bars
+    service = RelativeMetricsService(
+        settings=container.settings,
+        candle_repo=container.candle_repo,
+        ticker_index_repo=container.ticker_index_repo,
+        watch_index_repo=container.watch_index_repo,
+        cache=container.redis_cache,
+    )
+    payload = service.get_metrics(symbol, interval, lookback)
+    return RelativeMetricsResponse(**payload)
+
+
+@router.get("/stocks/{symbol}/expiries", response_model=ExpiriesResponse)
+def get_stock_expiries(
+    symbol: str,
+    exchange: str = Query(None),
+    year: int | None = Query(None),
+    month: int | None = Query(None),
+    container: Container = Depends(container_dep),
+) -> ExpiriesResponse:
+    service = GrowwLiveDataService(container.settings, container.groww_client)
+    payload = service.fetch_expiries(
+        exchange=(exchange or container.settings.groww_exchange).upper(),
+        underlying_symbol=symbol.strip().upper(),
+        year=year,
+        month=month,
+    )
+    return ExpiriesResponse(**payload)
 
 
 @router.get("/admin/stocks", response_model=List[WatchStock])

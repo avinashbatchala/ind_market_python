@@ -78,3 +78,38 @@ class WatchIndexUpdate(BaseModel):
 
 class WatchIndex(WatchIndexBase):
     id: int
+
+
+class RelativeMetricRow(BaseModel):
+    index: str
+    rrs: float | None
+    rrv: float | None
+    rve: float | None
+    signal: str
+    timeframe: str
+    updated_at: str | None
+    error: str | None = None
+
+
+class RelativeMetricsResponse(BaseModel):
+    symbol: str
+    timeframe: str
+    rows: List[RelativeMetricRow]
+
+
+class LiveDataResponse(BaseModel):
+    symbol: str
+    exchange: str
+    segment: str
+    ltp: float | None = None
+    change: float | None = None
+    timestamp: str | None = None
+    quote: dict | None = None
+    options_chain: dict | None = None
+    greeks: dict | None = None
+    errors: dict | None = None
+
+
+class ExpiriesResponse(BaseModel):
+    expiries: list | None = None
+    errors: dict | None = None

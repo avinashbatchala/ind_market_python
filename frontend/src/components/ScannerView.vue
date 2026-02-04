@@ -119,7 +119,7 @@
           <span>RVE</span>
           <span>Signal</span>
         </div>
-        <div v-for="row in filteredRows" :key="row.symbol" class="row">
+        <div v-for="row in filteredRows" :key="row.symbol" class="row clickable" @click="emit('open-stock', row.symbol)">
           <span class="symbol">{{ row.symbol }}</span>
           <span>{{ row.benchmark_symbol || "-" }}</span>
           <span>{{ formatNum(row.rrs) }}</span>
@@ -160,6 +160,7 @@ const emit = defineEmits([
   "update:rrvMax",
   "update:rveMin",
   "update:rveMax",
+  "open-stock",
 ]);
 
 const timeframeModel = computed({

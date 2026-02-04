@@ -3,8 +3,17 @@
     <SidebarNav :view="view" @change="setView" />
 
     <main class="content">
+      <StockDetailView
+        v-if="isStockRoute"
+        :symbol="stockSymbol"
+        :api-base="apiBase"
+        :timeframes="timeframes"
+        :default-timeframe="timeframe"
+        @back="navigateHome"
+      />
+
       <ScannerView
-        v-if="view === 'bullish' || view === 'bearish'"
+        v-else-if="view === 'bullish' || view === 'bearish'"
         :scanner-title="scannerTitle"
         :timeframes="timeframes"
         :range-bounds="rangeBounds"
@@ -18,6 +27,7 @@
         v-model:rrvMax="rrvMax"
         v-model:rveMin="rveMin"
         v-model:rveMax="rveMax"
+        @open-stock="navigateToStock"
       />
 
       <IndicesView
@@ -42,6 +52,7 @@ import ScannerView from "./components/ScannerView.vue";
 import IndicesView from "./components/IndicesView.vue";
 import ScoresView from "./components/ScoresView.vue";
 import ManageView from "./components/ManageView.vue";
+import StockDetailView from "./components/StockDetailView.vue";
 
 const timeframes = ["5m", "15m", "1h", "1d"];
 const timeframe = ref("5m");
@@ -61,8 +72,17 @@ const lastUpdated = ref("-");
 const benchUpdated = ref("-");
 let socket = null;
 let hashListener = null;
+let popListener = null;
 
 const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const routePath = ref(typeof window !== "undefined" ? window.location.pathname : "/");
+
+const isStockRoute = computed(() => routePath.value.startsWith("/stocks/"));
+const stockSymbol = computed(() => {
+  if (!isStockRoute.value) return "";
+  const parts = routePath.value.split("/");
+  return decodeURIComponent(parts[2] || "").toUpperCase();
+});
 
 const fetchScanner = async () => {
   const res = await fetch(`${apiBase}/scanner?timeframe=${timeframe.value}`);
@@ -108,9 +128,29 @@ const refreshScanner = async () => {
 };
 
 const setView = (next) => {
+  if (isStockRoute.value) {
+    navigateHome();
+  }
   view.value = next;
   if (typeof window !== "undefined") {
     window.location.hash = next;
+  }
+};
+
+const navigateToStock = (symbol) => {
+  if (typeof window === "undefined") return;
+  stopWS();
+  const path = `/stocks/${encodeURIComponent(symbol)}`;
+  window.history.pushState({}, "", path);
+  routePath.value = path;
+};
+
+const navigateHome = () => {
+  if (typeof window === "undefined") return;
+  window.history.pushState({}, "", "/");
+  routePath.value = "/";
+  if (view.value === "bullish" || view.value === "bearish") {
+    refreshScanner();
   }
 };
 
@@ -204,9 +244,13 @@ onMounted(async () => {
   syncFromHash();
   hashListener = () => syncFromHash();
   window.addEventListener("hashchange", hashListener);
+  popListener = () => {
+    routePath.value = window.location.pathname || "/";
+  };
+  window.addEventListener("popstate", popListener);
   if (view.value === "indices") {
     await fetchBenchmarks();
-  } else if (view.value !== "scores" && view.value !== "manage") {
+  } else if (view.value !== "scores" && view.value !== "manage" && !isStockRoute.value) {
     await refreshScanner();
   }
 });
@@ -215,6 +259,9 @@ onBeforeUnmount(() => {
   stopWS();
   if (hashListener) {
     window.removeEventListener("hashchange", hashListener);
+  }
+  if (popListener) {
+    window.removeEventListener("popstate", popListener);
   }
 });
 </script>

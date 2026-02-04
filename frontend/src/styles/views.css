@@ -216,6 +216,16 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.row.clickable {
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.row.clickable:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .row span {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -257,6 +267,89 @@
 .scores {
   display: grid;
   gap: 24px;
+}
+
+.stock-detail {
+  display: grid;
+  gap: 20px;
+}
+
+.detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.detail-title h1 {
+  margin: 6px 0 0;
+}
+
+.ghost {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ghost:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.live-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.options-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.options-table .row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.greeks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.json-block {
+  background: rgba(15, 20, 26, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.inline-error {
+  color: var(--danger);
+  font-size: 12px;
 }
 
 .manage {
