@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time
 from typing import Dict, List, Optional
 
@@ -55,64 +55,84 @@ class IntradayOptionsEngine:
         self.config = config or IntradayStrategyConfig()
 
     def generate_trade_plans(self, now: datetime, symbols: List[str]) -> List[TradePlan]:
-        if not self._within_gate(now):
-            return []
-
         plans: List[TradePlan] = []
         for symbol in symbols:
-            indicator_set = self._compute_indicators(symbol)
-            if indicator_set is None:
-                continue
-
-            direction = self._direction_gate(indicator_set)
-            if direction == Direction.NONE:
-                continue
-
-            chain_raw, expiry_date = self._fetch_chain(symbol)
-            if chain_raw is None or expiry_date is None:
-                continue
-
-            contracts, underlying_price = normalize_chain(chain_raw, symbol)
-            if not contracts:
-                continue
-
-            iv_atm = compute_atm_iv(contracts, underlying_price)
-            if iv_atm is None:
-                continue
-
-            self.iv_tracker.update(symbol, now, iv_atm)
-            iv_ref = self.iv_tracker.get_ref(symbol, now)
-            if iv_ref is None:
-                continue
-
-            regime = self._vol_regime(indicator_set.rve, iv_atm, iv_ref)
-            if regime == Regime.NONE:
-                continue
-
-            strategy = self._select_strategy(direction, regime, indicator_set.rrv)
-            if strategy == StrategyType.NONE:
-                continue
-
-            legs = self._select_contracts(strategy, contracts, iv_ref)
-            if not legs:
-                continue
-
-            dte = _days_to_expiry(expiry_date, now)
-            plan = TradePlan(
-                symbol=symbol,
-                direction=direction,
-                regime=regime,
-                strategy=strategy,
-                legs=legs,
-                dte=dte,
-                max_risk_pct=self.config.max_risk_pct,
-                entry_type=EntryType.LIMIT,
-                exits=self._exit_rules(strategy),
-                timestamp=now.isoformat(),
-                notes=[f"iv_atm={iv_atm:.2f}", f"iv_ref={iv_ref:.2f}"]
-            )
-            plans.append(plan)
+            plan, _ = self.generate_trade_plan(now, symbol)
+            if plan:
+                plans.append(plan)
         return plans
+
+    def generate_trade_plan(self, now: datetime, symbol: str) -> tuple[Optional[TradePlan], List[str]]:
+        trace: List[str] = []
+        if not self._within_gate(now):
+            trace.append("TIME_GATE")
+            return None, trace
+
+        indicator_set = self._compute_indicators(symbol)
+        if indicator_set is None:
+            trace.append("INDICATORS_MISSING")
+            return None, trace
+
+        direction = self._direction_gate(indicator_set)
+        if direction == Direction.NONE:
+            trace.append("DIRECTION_NONE")
+            return None, trace
+
+        chain_raw, expiry_date = self._fetch_chain(symbol)
+        if expiry_date is None:
+            trace.append("EXPIRY_MISSING")
+            return None, trace
+        if chain_raw is None:
+            trace.append("CHAIN_MISSING")
+            return None, trace
+
+        contracts, underlying_price = normalize_chain(chain_raw, symbol)
+        if not contracts:
+            trace.append("CONTRACTS_EMPTY")
+            return None, trace
+
+        iv_atm = compute_atm_iv(contracts, underlying_price)
+        if iv_atm is None:
+            trace.append("IV_ATM_MISSING")
+            return None, trace
+
+        self.iv_tracker.update(symbol, now, iv_atm)
+        iv_ref = self.iv_tracker.get_ref(symbol, now)
+        if iv_ref is None:
+            trace.append("IV_REF_EMPTY")
+            return None, trace
+
+        regime = self._vol_regime(indicator_set.rve, iv_atm, iv_ref)
+        if regime == Regime.NONE:
+            trace.append("REGIME_NONE")
+            return None, trace
+
+        strategy = self._select_strategy(direction, regime, indicator_set.rrv)
+        if strategy == StrategyType.NONE:
+            trace.append("STRATEGY_NONE")
+            return None, trace
+
+        legs = self._select_contracts(strategy, contracts, iv_ref, trace)
+        if not legs:
+            trace.append("NO_LEGS")
+            return None, trace
+
+        dte = _days_to_expiry(expiry_date, now)
+        plan = TradePlan(
+            symbol=symbol,
+            direction=direction,
+            regime=regime,
+            strategy=strategy,
+            legs=legs,
+            dte=dte,
+            max_risk_pct=self.config.max_risk_pct,
+            entry_type=EntryType.LIMIT,
+            exits=self._exit_rules(strategy),
+            timestamp=now.isoformat(),
+            notes=[f"iv_atm={iv_atm:.2f}", f"iv_ref={iv_ref:.2f}"]
+            + (["RELAXED_LIQUIDITY"] if "RELAXED_LIQUIDITY" in trace else [])
+        )
+        return plan, trace
 
     def _within_gate(self, now: datetime) -> bool:
         tz = self.settings.market_tz
@@ -188,27 +208,26 @@ class IntradayOptionsEngine:
         strategy: StrategyType,
         contracts: List,
         iv_ref: Optional[float],
+        trace: Optional[List[str]] = None,
     ) -> List[OptionLeg]:
         cfg = self.config
-        if strategy == StrategyType.BUY_CALL:
-            leg = select_long_call(contracts, cfg, iv_ref)
-            return [leg] if leg else []
-        if strategy == StrategyType.BUY_PUT:
-            leg = select_long_put(contracts, cfg, iv_ref)
-            return [leg] if leg else []
-        if strategy == StrategyType.BULL_PUT_SPREAD:
-            legs = select_credit_spread(contracts, cfg, OptionType.PUT)
-            return legs or []
-        if strategy == StrategyType.BEAR_CALL_SPREAD:
-            legs = select_credit_spread(contracts, cfg, OptionType.CALL)
-            return legs or []
-        if strategy == StrategyType.BULL_CALL_SPREAD:
-            legs = select_debit_spread(contracts, cfg, OptionType.CALL, iv_ref)
-            return legs or []
-        if strategy == StrategyType.BEAR_PUT_SPREAD:
-            legs = select_debit_spread(contracts, cfg, OptionType.PUT, iv_ref)
-            return legs or []
-        return []
+        legs = _select_by_strategy(strategy, contracts, cfg, iv_ref)
+        if legs:
+            return legs
+        if not cfg.allow_illiquid_fallback:
+            return []
+        relaxed = replace(
+            cfg,
+            oi_min=0,
+            vol_min=0,
+            ltp_min=0.1,
+            spread_max=1.0,
+            theta_ratio_max=1.0,
+        )
+        legs = _select_by_strategy(strategy, contracts, relaxed, iv_ref)
+        if legs and trace is not None:
+            trace.append("RELAXED_LIQUIDITY")
+        return legs or []
 
     def _exit_rules(self, strategy: StrategyType) -> dict:
         cfg = self.config
@@ -287,6 +306,33 @@ def _compute_rve(sym: Dict[str, np.ndarray], bench: Dict[str, np.ndarray]) -> Op
     ben_ohlc = {k: ben_aligned[k] for k in ["high", "low", "close"]}
     series = rve(sym_ohlc, ben_ohlc, length=12, atr_period=14, smooth_atr=1)
     return float(series[-1])
+
+
+def _select_by_strategy(
+    strategy: StrategyType,
+    contracts: List,
+    cfg: IntradayStrategyConfig,
+    iv_ref: Optional[float],
+) -> List[OptionLeg]:
+    if strategy == StrategyType.BUY_CALL:
+        leg = select_long_call(contracts, cfg, iv_ref)
+        return [leg] if leg else []
+    if strategy == StrategyType.BUY_PUT:
+        leg = select_long_put(contracts, cfg, iv_ref)
+        return [leg] if leg else []
+    if strategy == StrategyType.BULL_PUT_SPREAD:
+        legs = select_credit_spread(contracts, cfg, OptionType.PUT)
+        return legs or []
+    if strategy == StrategyType.BEAR_CALL_SPREAD:
+        legs = select_credit_spread(contracts, cfg, OptionType.CALL)
+        return legs or []
+    if strategy == StrategyType.BULL_CALL_SPREAD:
+        legs = select_debit_spread(contracts, cfg, OptionType.CALL, iv_ref)
+        return legs or []
+    if strategy == StrategyType.BEAR_PUT_SPREAD:
+        legs = select_debit_spread(contracts, cfg, OptionType.PUT, iv_ref)
+        return legs or []
+    return []
 
 
 def _parse_time(value: str) -> time:

@@ -81,8 +81,28 @@ if [[ ! -f "$ENV_FILE" ]]; then
   fi
 fi
 
-GROWW_KEY_INPUT="${1:-${GROWW_API_KEY:-}}"
-GROWW_SECRET_INPUT="${2:-${GROWW_API_SECRET:-}}"
+EXISTING_GROWW_KEY=""
+EXISTING_GROWW_SECRET=""
+if [[ -f "$ENV_FILE" ]]; then
+  read -r EXISTING_GROWW_KEY EXISTING_GROWW_SECRET < <(python3 - <<'PY'
+import os
+from pathlib import Path
+
+env_path = Path(os.environ["ENV_FILE"])
+key = ""
+secret = ""
+for line in env_path.read_text().splitlines():
+    if line.startswith("GROWW_API_KEY="):
+        key = line.split("=", 1)[1].strip().strip('"').strip("'")
+    elif line.startswith("GROWW_API_SECRET="):
+        secret = line.split("=", 1)[1].strip().strip('"').strip("'")
+print(f"{key} {secret}")
+PY
+)
+fi
+
+GROWW_KEY_INPUT="${1:-${GROWW_API_KEY:-${EXISTING_GROWW_KEY:-}}}"
+GROWW_SECRET_INPUT="${2:-${GROWW_API_SECRET:-${EXISTING_GROWW_SECRET:-}}}"
 if [[ -z "$GROWW_KEY_INPUT" ]]; then
   echo "==> Enter GROWW_API_KEY (input hidden):"
   read -r -s GROWW_KEY_INPUT

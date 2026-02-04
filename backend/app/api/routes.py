@@ -137,6 +137,7 @@ def get_stock_relative_metrics(
 @router.get("/stocks/{symbol}/intraday-plan", response_model=IntradayPlanResponse)
 def get_intraday_plan(
     symbol: str,
+    debug: bool = Query(False),
     container: Container = Depends(container_dep),
 ) -> IntradayPlanResponse:
     live_data = GrowwLiveDataService(container.settings, container.groww_client)
@@ -150,10 +151,9 @@ def get_intraday_plan(
         iv_tracker=_iv_tracker,
     )
     now = datetime.now(timezone.utc)
-    plans = engine.generate_trade_plans(now, [symbol.strip().upper()])
-    if not plans:
-        return IntradayPlanResponse(plan=None, reason="NO_TRADE")
-    plan = plans[0]
+    plan, trace = engine.generate_trade_plan(now, symbol.strip().upper())
+    if not plan:
+        return IntradayPlanResponse(plan=None, reason="NO_TRADE", debug=trace if debug else None)
     legs = [
         {
             "symbol": leg.contract.symbol,
@@ -182,7 +182,7 @@ def get_intraday_plan(
         "legs": legs,
         "notes": plan.notes,
     }
-    return IntradayPlanResponse(plan=payload, reason=None)
+    return IntradayPlanResponse(plan=payload, reason=None, debug=trace if debug else None)
 
 
 @router.get("/stocks/{symbol}/expiries", response_model=ExpiriesResponse)

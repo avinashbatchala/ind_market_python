@@ -40,6 +40,7 @@ def extract_underlying_price(raw: dict) -> Optional[float]:
     candidates = [
         raw.get("underlyingValue"),
         raw.get("underlying_price"),
+        raw.get("underlying_ltp"),
         raw.get("spotPrice"),
         raw.get("spot"),
     ]
@@ -71,6 +72,24 @@ def iter_chain_rows(raw: dict) -> Iterable[dict]:
     for cand in candidates:
         if isinstance(cand, list):
             return cand
+
+    strikes = raw.get("strikes") or raw.get("option_strikes")
+    if not strikes and data:
+        strikes = data.get("strikes") or data.get("option_strikes")
+    if isinstance(strikes, dict):
+        rows: list[dict] = []
+        for strike_key, sides in strikes.items():
+            if not isinstance(sides, dict):
+                continue
+            for side_key, side in sides.items():
+                if not isinstance(side, dict):
+                    continue
+                row = dict(side)
+                row["strikePrice"] = strike_key
+                row["optionType"] = side_key
+                rows.append(row)
+        return rows
+
     return []
 
 

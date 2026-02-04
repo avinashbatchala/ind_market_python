@@ -145,3 +145,4 @@ class IntradayPlan(BaseModel):
 class IntradayPlanResponse(BaseModel):
     plan: IntradayPlan | None = None
     reason: str | None = None
+    debug: list[str] | None = None

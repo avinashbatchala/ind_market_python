@@ -24,6 +24,8 @@ class IntradayStrategyConfig:
     spread_max: float = 0.05
     theta_ratio_max: float = 0.06
 
+    allow_illiquid_fallback: bool = True
+
     delta_long_call: tuple[float, float] = (0.45, 0.60)
     delta_long_put: tuple[float, float] = (-0.60, -0.45)
     delta_short_abs: tuple[float, float] = (0.15, 0.30)
