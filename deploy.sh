@@ -84,7 +84,7 @@ fi
 EXISTING_GROWW_KEY=""
 EXISTING_GROWW_SECRET=""
 if [[ -f "$ENV_FILE" ]]; then
-  ENV_FILE="$ENV_FILE" read -r EXISTING_GROWW_KEY EXISTING_GROWW_SECRET < <(python3 - <<'PY'
+  read -r EXISTING_GROWW_KEY EXISTING_GROWW_SECRET < <(ENV_FILE="$ENV_FILE" python3 - <<'PY'
 import os
 from pathlib import Path
 
