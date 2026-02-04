@@ -113,3 +113,35 @@ class LiveDataResponse(BaseModel):
 class ExpiriesResponse(BaseModel):
     expiries: list | None = None
     errors: dict | None = None
+
+
+class IntradayPlanLeg(BaseModel):
+    symbol: str
+    option_type: str
+    side: str
+    strike: float
+    expiry: str
+    ltp: float
+    delta: float | None = None
+    theta: float | None = None
+    iv: float | None = None
+    quantity: int = 1
+
+
+class IntradayPlan(BaseModel):
+    symbol: str
+    direction: str
+    regime: str
+    strategy: str
+    dte: int
+    max_risk_pct: float
+    entry_type: str
+    exits: dict
+    timestamp: str
+    legs: List[IntradayPlanLeg]
+    notes: List[str] = []
+
+
+class IntradayPlanResponse(BaseModel):
+    plan: IntradayPlan | None = None
+    reason: str | None = None

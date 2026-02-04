@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, Iterable
 import inspect
+from datetime import datetime, timezone, timedelta
 
 from app.core.config import Settings
 from app.infra.groww.client import GrowwClient, RealGrowwClient
+from app.domain.options.groww_chain_adapter import normalize_chain
 
 
 class GrowwLiveDataService:
@@ -53,6 +55,12 @@ class GrowwLiveDataService:
 
         options_chain = None
         chain_expiry = expiry_date or expiry
+        if not chain_expiry:
+            chain_expiry = _resolve_default_expiry(
+                client=client,
+                exchange_const=exchange_const,
+                underlying_symbol=underlying or symbol,
+            )
         if hasattr(client, "get_option_chain"):
             if not chain_expiry:
                 errors["options_chain"] = "Missing expiry_date for option chain"
@@ -72,7 +80,14 @@ class GrowwLiveDataService:
 
         greeks = None
         if hasattr(client, "get_greeks"):
-            if not trading_symbol or not expiry:
+            greeks_expiry = expiry or expiry_date or chain_expiry
+            selected_symbol = trading_symbol
+            if not selected_symbol and options_chain:
+                contracts, underlying_price = normalize_chain(options_chain, underlying or symbol)
+                selected_symbol = _pick_greeks_symbol(contracts, underlying_price)
+                if not greeks_expiry and contracts:
+                    greeks_expiry = contracts[0].expiry or greeks_expiry
+            if not selected_symbol or not greeks_expiry:
                 errors["greeks"] = "Missing trading_symbol or expiry for greeks"
             else:
                 greeks = _safe_call(
@@ -80,8 +95,8 @@ class GrowwLiveDataService:
                         client.get_greeks,
                         exchange=exchange_const,
                         underlying=underlying or symbol,
-                        trading_symbol=trading_symbol,
-                        expiry=expiry,
+                        trading_symbol=selected_symbol,
+                        expiry=greeks_expiry,
                     ),
                     errors,
                     "greeks",
@@ -121,22 +136,26 @@ class GrowwLiveDataService:
         exchange_const = getattr(module, f"EXCHANGE_{exchange}", exchange)
 
         errors: dict[str, str] = {}
-        expiries = None
+        expiries: list[str] = []
         if hasattr(client, "get_expiries"):
-            expiries = _safe_call(
-                lambda: _call_supported(
-                    client.get_expiries,
-                    exchange=exchange_const,
-                    underlying_symbol=underlying_symbol,
-                    year=year,
-                    month=month,
-                ),
-                errors,
-                "expiries",
-            )
+            targets = _expiry_targets(year=year, month=month)
+            for yr, mo in targets:
+                response = _safe_call(
+                    lambda: _call_supported(
+                        client.get_expiries,
+                        exchange=exchange_const,
+                        underlying_symbol=underlying_symbol,
+                        year=yr,
+                        month=mo,
+                    ),
+                    errors,
+                    "expiries",
+                )
+                expiries.extend(_extract_expiries(response))
         else:
             errors["expiries"] = "SDK missing get_expiries"
 
+        expiries = _dedupe_expiries(expiries)
         return {"expiries": expiries, "errors": errors or None}
 
 
@@ -152,6 +171,108 @@ def _call_supported(fn, **kwargs):
     sig = inspect.signature(fn)
     supported = {k: v for k, v in kwargs.items() if k in sig.parameters and v is not None}
     return fn(**supported)
+
+
+def _expiry_targets(year: Optional[int], month: Optional[int]) -> list[tuple[int, int]]:
+    if year and month:
+        return [(year, month)]
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(timezone.utc).astimezone(ist)
+    targets = [(now.year, now.month)]
+    next_month = now.month + 1
+    next_year = now.year
+    if next_month == 13:
+        next_month = 1
+        next_year += 1
+    targets.append((next_year, next_month))
+    return targets
+
+
+def _extract_expiries(response: Any) -> list[str]:
+    if response is None:
+        return []
+    if isinstance(response, dict):
+        for key in ("expiries", "expiryDates", "expiry_dates"):
+            if key in response:
+                return _extract_expiries(response[key])
+        data = response.get("data")
+        if data is not None:
+            return _extract_expiries(data)
+        return []
+    if isinstance(response, list):
+        expiries: list[str] = []
+        for item in response:
+            if isinstance(item, dict):
+                val = item.get("expiry") or item.get("expiryDate") or item.get("date")
+                if val:
+                    expiries.append(str(val))
+            else:
+                expiries.append(str(item))
+        return expiries
+    return []
+
+
+def _dedupe_expiries(expiries: Iterable[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen = set()
+    for item in expiries:
+        if not item:
+            continue
+        value = str(item)
+        if value in seen:
+            continue
+        seen.add(value)
+        cleaned.append(value)
+    cleaned.sort()
+    return cleaned
+
+
+def _resolve_default_expiry(client: Any, exchange_const: Any, underlying_symbol: str) -> Optional[str]:
+    if not hasattr(client, "get_expiries"):
+        return None
+    targets = _expiry_targets(year=None, month=None)
+    expiries: list[str] = []
+    for yr, mo in targets:
+        try:
+            response = _call_supported(
+                client.get_expiries,
+                exchange=exchange_const,
+                underlying_symbol=underlying_symbol,
+                year=yr,
+                month=mo,
+            )
+        except Exception:
+            continue
+        expiries.extend(_extract_expiries(response))
+    expiries = _dedupe_expiries(expiries)
+    return expiries[0] if expiries else None
+
+
+def _pick_greeks_symbol(contracts: list[Any], underlying_price: Optional[float]) -> Optional[str]:
+    if not contracts:
+        return None
+    if underlying_price is None:
+        sorted_contracts = sorted(
+            contracts,
+            key=lambda c: (
+                0 if getattr(c, "option_type", None) and c.option_type.value == "CALL" else 1,
+                -(getattr(c, "open_interest", 0) or 0),
+                -(getattr(c, "volume", 0) or 0),
+            ),
+        )
+    else:
+        sorted_contracts = sorted(
+            contracts,
+            key=lambda c: (
+                abs((getattr(c, "strike", 0) or 0) - underlying_price),
+                0 if getattr(c, "option_type", None) and c.option_type.value == "CALL" else 1,
+            ),
+        )
+    for contract in sorted_contracts:
+        symbol = getattr(contract, "symbol", None)
+        if symbol:
+            return symbol
+    return None
 
 
 def _extract_ltp(quote: Any) -> Optional[float]:

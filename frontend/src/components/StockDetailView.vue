@@ -17,6 +17,61 @@
 
     <section class="card">
       <div class="card-head">
+        <h3>Intraday Plan</h3>
+        <span class="badge" :class="planStatusClass">{{ planStatus }}</span>
+      </div>
+      <div v-if="plan && plan.strategy" class="plan-grid">
+        <div>
+          <p class="metric">Direction</p>
+          <h3>{{ plan.direction }}</h3>
+        </div>
+        <div>
+          <p class="metric">Regime</p>
+          <h3>{{ plan.regime }}</h3>
+        </div>
+        <div>
+          <p class="metric">Strategy</p>
+          <h3>{{ plan.strategy }}</h3>
+        </div>
+        <div>
+          <p class="metric">DTE</p>
+          <h3>{{ plan.dte }}</h3>
+        </div>
+        <div>
+          <p class="metric">Entry</p>
+          <h3>{{ plan.entry_type }}</h3>
+        </div>
+        <div>
+          <p class="metric">Max Risk</p>
+          <h3>{{ formatPct(plan.max_risk_pct) }}</h3>
+        </div>
+      </div>
+      <div v-if="plan && plan.legs && plan.legs.length" class="options-table">
+        <div class="row header">
+          <span>Leg</span>
+          <span>Symbol</span>
+          <span>Type</span>
+          <span>Strike</span>
+          <span>Expiry</span>
+          <span>LTP</span>
+        </div>
+        <div v-for="(leg, idx) in plan.legs" :key="idx" class="row">
+          <span>{{ leg.side }}</span>
+          <span>{{ leg.symbol }}</span>
+          <span>{{ leg.option_type }}</span>
+          <span>{{ leg.strike }}</span>
+          <span>{{ leg.expiry }}</span>
+          <span>{{ formatNum(leg.ltp) }}</span>
+        </div>
+      </div>
+      <div v-else-if="planStatus === 'NO_TRADE'" class="json-block">
+        <pre>No trade plan available.</pre>
+      </div>
+      <p v-if="planError" class="inline-error">{{ planError }}</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
         <h3>Live Data</h3>
         <span class="badge" :class="liveStatusClass">{{ liveStatus }}</span>
       </div>
@@ -55,11 +110,6 @@
             <option value="">Latest</option>
             <option v-for="exp in expiryOptions" :key="exp" :value="exp">{{ exp }}</option>
           </select>
-          <input v-if="expiriesError" v-model="expiry" placeholder="YYYY-MM-DD" />
-        </div>
-        <div class="filter-card compact">
-          <span class="filter-title">Trading Symbol</span>
-          <input v-model="tradingSymbol" placeholder="NIFTY25O1425100CE" />
         </div>
         <div class="filter-card compact">
           <span class="filter-title">Type</span>
@@ -71,6 +121,7 @@
         </div>
         <button class="ghost" @click="fetchLive">Refresh</button>
       </div>
+      <p v-if="expiriesError" class="inline-error">{{ expiriesError }}</p>
 
       <div v-if="optionsList.length" class="options-table">
         <div class="row header">
@@ -154,9 +205,12 @@ const emit = defineEmits(["back"]);
 const timeframe = ref(props.defaultTimeframe);
 const expiry = ref("");
 const optionType = ref("");
-const tradingSymbol = ref("");
 const expiriesLoading = ref(false);
 const expiriesError = ref("");
+const expiryList = ref([]);
+const plan = ref(null);
+const planError = ref("");
+const planLoading = ref(false);
 
 const live = ref({});
 const liveError = ref("");
@@ -181,7 +235,6 @@ const fetchLive = async () => {
     if (expiry.value) params.set("expiry", expiry.value);
     if (expiry.value) params.set("expiry_date", expiry.value);
     if (optionType.value) params.set("option_type", optionType.value);
-    if (tradingSymbol.value) params.set("trading_symbol", tradingSymbol.value);
     const res = await fetch(`${props.apiBase}/stocks/${props.symbol}/live?${params.toString()}`);
     if (!res.ok) {
       liveError.value = `Failed to load live data (${res.status})`;
@@ -201,6 +254,23 @@ const fetchLive = async () => {
   }
 };
 
+const fetchPlan = async () => {
+  planLoading.value = true;
+  planError.value = "";
+  try {
+    const res = await fetch(`${props.apiBase}/stocks/${props.symbol}/intraday-plan`);
+    if (!res.ok) {
+      planError.value = `Failed to load plan (${res.status})`;
+      return;
+    }
+    const data = await res.json();
+    plan.value = data.plan;
+  } catch (err) {
+    planError.value = String(err);
+  } finally {
+    planLoading.value = false;
+  }
+};
 const fetchExpiries = async () => {
   expiriesLoading.value = true;
   expiriesError.value = "";
@@ -211,10 +281,10 @@ const fetchExpiries = async () => {
       return;
     }
     const data = await res.json();
-    const list = data.expiries || [];
-    if (Array.isArray(list) && list.length) {
+    const list = Array.isArray(data.expiries) ? data.expiries : [];
+    expiryList.value = list;
+    if (list.length) {
       expiry.value = list[0];
-      optionsChain.value = optionsChain.value; // no-op to keep reactivity
     }
   } catch (err) {
     expiriesError.value = String(err);
@@ -246,9 +316,36 @@ const fetchMetrics = async () => {
 const liveFields = computed(() => {
   const quote = live.value?.quote;
   if (!quote || typeof quote !== "object") return [];
-  return Object.entries(quote)
-    .slice(0, 12)
-    .map(([key, value]) => ({ key, value: formatValue(value) }));
+  const rows = [];
+  if (quote.ohlc && typeof quote.ohlc === "object") {
+    rows.push({ key: "ohlc_open", value: formatValue(quote.ohlc.open) });
+    rows.push({ key: "ohlc_high", value: formatValue(quote.ohlc.high) });
+    rows.push({ key: "ohlc_low", value: formatValue(quote.ohlc.low) });
+    rows.push({ key: "ohlc_close", value: formatValue(quote.ohlc.close) });
+  }
+  if (quote.depth && typeof quote.depth === "object") {
+    const bestBuy = Array.isArray(quote.depth.buy) ? quote.depth.buy[0] : null;
+    const bestSell = Array.isArray(quote.depth.sell) ? quote.depth.sell[0] : null;
+    if (bestBuy) {
+      rows.push({ key: "best_bid_price", value: formatValue(bestBuy.price) });
+      rows.push({ key: "best_bid_qty", value: formatValue(bestBuy.quantity) });
+    }
+    if (bestSell) {
+      rows.push({ key: "best_ask_price", value: formatValue(bestSell.price) });
+      rows.push({ key: "best_ask_qty", value: formatValue(bestSell.quantity) });
+    }
+  }
+  const skipKeys = new Set(["ohlc", "depth"]);
+  for (const [key, value] of Object.entries(quote)) {
+    if (skipKeys.has(key)) continue;
+    if (value === null || value === undefined) {
+      rows.push({ key, value: "-" });
+      continue;
+    }
+    if (typeof value === "object") continue;
+    rows.push({ key, value: formatValue(value) });
+  }
+  return rows;
 });
 
 const expiries = computed(() => {
@@ -268,6 +365,7 @@ const expiries = computed(() => {
 });
 
 const expiryOptions = computed(() => {
+  if (expiryList.value.length) return expiryList.value;
   const chainExpiries = expiries.value;
   if (chainExpiries.length) return chainExpiries;
   return [];
@@ -277,7 +375,6 @@ const expirySelectDisabled = computed(() => expiriesLoading.value);
 
 const expiryLabel = computed(() => {
   if (expiriesLoading.value) return "Loading...";
-  if (expiriesError.value) return "Expiry (manual)";
   return "Expiry";
 });
 
@@ -307,6 +404,19 @@ const liveStatus = computed(() => {
   return "READY";
 });
 
+const planStatus = computed(() => {
+  if (planLoading.value) return "LOADING";
+  if (planError.value) return "ERROR";
+  if (!plan.value) return "NO_TRADE";
+  return "READY";
+});
+
+const planStatusClass = computed(() => {
+  if (planLoading.value) return "neutral";
+  if (planError.value) return "bearish";
+  if (!plan.value) return "no_data";
+  return "bullish";
+});
 const liveStatusClass = computed(() => {
   if (liveLoading.value) return "neutral";
   if (liveError.value) return "bearish";
@@ -342,9 +452,14 @@ const formatNum = (value) => {
   return Number(value).toFixed(2);
 };
 
+const formatPct = (value) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "-";
+  return `${(Number(value) * 100).toFixed(2)}%`;
+};
+
 const formatValue = (value) => {
   if (value === null || value === undefined) return "-";
-  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "object") return "-";
   return String(value);
 };
 
@@ -367,6 +482,7 @@ watch(timeframe, async () => {
 });
 
 onMounted(async () => {
+  await fetchPlan();
   await fetchExpiries();
   await fetchLive();
   await fetchMetrics();

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +9,7 @@ from app.api.schemas import (
     BenchmarksResponse,
     ScannerResponse,
     LiveDataResponse,
+    IntradayPlanResponse,
     ExpiriesResponse,
     RelativeMetricsResponse,
     WatchStock,
@@ -20,8 +22,11 @@ from app.api.schemas import (
 from app.core.container import get_container, Container
 from app.services.groww_live_data import GrowwLiveDataService
 from app.services.relative_metrics import RelativeMetricsService
+from app.domain.options.iv_tracker import IvTracker
+from app.domain.strategy.intraday_options_decision_tree import IntradayOptionsEngine
 
 router = APIRouter()
+_iv_tracker = IvTracker()
 
 
 def container_dep() -> Container:
@@ -127,6 +132,57 @@ def get_stock_relative_metrics(
     )
     payload = service.get_metrics(symbol, interval, lookback)
     return RelativeMetricsResponse(**payload)
+
+
+@router.get("/stocks/{symbol}/intraday-plan", response_model=IntradayPlanResponse)
+def get_intraday_plan(
+    symbol: str,
+    container: Container = Depends(container_dep),
+) -> IntradayPlanResponse:
+    live_data = GrowwLiveDataService(container.settings, container.groww_client)
+    engine = IntradayOptionsEngine(
+        settings=container.settings,
+        candle_repo=container.candle_repo,
+        ticker_index_repo=container.ticker_index_repo,
+        watch_index_repo=container.watch_index_repo,
+        cache=container.redis_cache,
+        live_data=live_data,
+        iv_tracker=_iv_tracker,
+    )
+    now = datetime.now(timezone.utc)
+    plans = engine.generate_trade_plans(now, [symbol.strip().upper()])
+    if not plans:
+        return IntradayPlanResponse(plan=None, reason="NO_TRADE")
+    plan = plans[0]
+    legs = [
+        {
+            "symbol": leg.contract.symbol,
+            "option_type": leg.contract.option_type.value,
+            "side": leg.side.value,
+            "strike": leg.contract.strike,
+            "expiry": leg.contract.expiry,
+            "ltp": leg.contract.ltp,
+            "delta": leg.contract.delta,
+            "theta": leg.contract.theta,
+            "iv": leg.contract.iv,
+            "quantity": leg.quantity,
+        }
+        for leg in plan.legs
+    ]
+    payload = {
+        "symbol": plan.symbol,
+        "direction": plan.direction.value,
+        "regime": plan.regime.value,
+        "strategy": plan.strategy.value,
+        "dte": plan.dte,
+        "max_risk_pct": plan.max_risk_pct,
+        "entry_type": plan.entry_type.value,
+        "exits": plan.exits,
+        "timestamp": plan.timestamp,
+        "legs": legs,
+        "notes": plan.notes,
+    }
+    return IntradayPlanResponse(plan=payload, reason=None)
 
 
 @router.get("/stocks/{symbol}/expiries", response_model=ExpiriesResponse)

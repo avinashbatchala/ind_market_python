@@ -274,6 +274,17 @@
   gap: 20px;
 }
 
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.plan-grid h3 {
+  margin: 6px 0 0;
+}
+
 .detail-head {
   display: flex;
   flex-wrap: wrap;
