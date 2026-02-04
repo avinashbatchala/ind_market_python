@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -50,7 +51,7 @@ def get_scanner(
     if payload is None:
         raise HTTPException(status_code=404, detail="Scanner data not available")
 
-    return ScannerResponse(**payload)
+    return ScannerResponse(**_sanitize(payload))
 
 
 @router.get("/symbol/{symbol}", response_model=ScannerResponse)
@@ -70,7 +71,7 @@ def get_symbol(
     if not rows:
         raise HTTPException(status_code=404, detail="Symbol not found")
 
-    return ScannerResponse(timeframe=payload["timeframe"], ts=payload["ts"], rows=rows)
+    return ScannerResponse(**_sanitize({"timeframe": payload["timeframe"], "ts": payload["ts"], "rows": rows}))
 
 
 @router.get("/benchmarks", response_model=BenchmarksResponse)
@@ -85,7 +86,7 @@ def get_benchmarks(
     if payload is None:
         raise HTTPException(status_code=404, detail="Benchmark data not available")
 
-    return BenchmarksResponse(**payload)
+    return BenchmarksResponse(**_sanitize(payload))
 
 
 @router.get("/stocks/{symbol}/live", response_model=LiveDataResponse)
@@ -111,7 +112,7 @@ def get_stock_live(
         trading_symbol=trading_symbol,
         expiry_date=expiry_date,
     )
-    return LiveDataResponse(**payload)
+    return LiveDataResponse(**_sanitize(payload))
 
 
 @router.get("/stocks/{symbol}/relative-metrics", response_model=RelativeMetricsResponse)
@@ -131,7 +132,7 @@ def get_stock_relative_metrics(
         cache=container.redis_cache,
     )
     payload = service.get_metrics(symbol, interval, lookback)
-    return RelativeMetricsResponse(**payload)
+    return RelativeMetricsResponse(**_sanitize(payload))
 
 
 @router.get("/stocks/{symbol}/intraday-plan", response_model=IntradayPlanResponse)
@@ -182,7 +183,7 @@ def get_intraday_plan(
         "legs": legs,
         "notes": plan.notes,
     }
-    return IntradayPlanResponse(plan=payload, reason=None, debug=trace if debug else None)
+    return IntradayPlanResponse(plan=_sanitize(payload), reason=None, debug=trace if debug else None)
 
 
 @router.get("/stocks/{symbol}/expiries", response_model=ExpiriesResponse)
@@ -200,7 +201,17 @@ def get_stock_expiries(
         year=year,
         month=month,
     )
-    return ExpiriesResponse(**payload)
+    return ExpiriesResponse(**_sanitize(payload))
+
+
+def _sanitize(value):
+    if isinstance(value, dict):
+        return {k: _sanitize(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize(v) for v in value]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return value
 
 
 @router.get("/admin/stocks", response_model=List[WatchStock])
@@ -310,10 +321,10 @@ def update_stock(
 @router.delete("/admin/stocks/{stock_id}")
 def delete_stock(stock_id: int, container: Container = Depends(container_dep)) -> dict:
     try:
-        stock = container.watch_stock_repo.get(stock_id)
-        if stock is None:
+        stock_fields = container.watch_stock_repo.get_fields(stock_id)
+        if stock_fields is None:
             raise HTTPException(status_code=404, detail="Stock not found")
-        container.ticker_index_repo.clear_mappings(stock.symbol)
+        container.ticker_index_repo.clear_mappings(stock_fields["symbol"])
         container.watch_stock_repo.delete(stock_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Stock not found")

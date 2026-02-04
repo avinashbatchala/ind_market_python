@@ -25,9 +25,9 @@ class BenchmarkState(BaseModel):
     timeframe: str
     ts: str
     regime: str
-    trend: float
-    vol_expansion: float
-    participation: float
+    trend: float | None = None
+    vol_expansion: float | None = None
+    participation: float | None = None
 
 
 class BenchmarksResponse(BaseModel):

@@ -169,7 +169,7 @@ class ComputeService:
         benchmark: Dict[str, np.ndarray],
         benchmark_symbol: str,
     ) -> Optional[dict]:
-        sym_vs_benchmark = self._compute_vs_benchmark(symbol, sym_data, benchmark)
+        sym_vs_benchmark = self._compute_vs_benchmark(symbol, timeframe, sym_data, benchmark)
         if sym_vs_benchmark is None:
             return None
 
@@ -199,14 +199,16 @@ class ComputeService:
     def _compute_vs_benchmark(
         self,
         symbol: str,
+        timeframe: str,
         sym_data: Dict[str, np.ndarray],
         bench_data: Dict[str, np.ndarray],
     ) -> Optional[dict]:
         sym_aligned, bench_aligned, common_ts = align_ohlcv(sym_data, bench_data)
-        if common_ts.size < 30:
+        min_aligned = 6 if timeframe == "5m" else 30
+        if common_ts.size < min_aligned:
             self.logger.warning(
                 "Insufficient aligned candles",
-                extra={"symbol": symbol, "aligned": int(common_ts.size)},
+                extra={"symbol": symbol, "timeframe": timeframe, "aligned": int(common_ts.size), "required": min_aligned},
             )
             return None
 
