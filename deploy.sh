@@ -84,11 +84,11 @@ fi
 EXISTING_GROWW_KEY=""
 EXISTING_GROWW_SECRET=""
 if [[ -f "$ENV_FILE" ]]; then
-  read -r EXISTING_GROWW_KEY EXISTING_GROWW_SECRET < <(ENV_FILE="$ENV_FILE" python3 - <<'PY'
-import os
+  read -r EXISTING_GROWW_KEY EXISTING_GROWW_SECRET < <(python3 - "$ENV_FILE" <<'PY'
+import sys
 from pathlib import Path
 
-env_path = Path(os.environ["ENV_FILE"])
+env_path = Path(sys.argv[1])
 key = ""
 secret = ""
 for line in env_path.read_text().splitlines():
@@ -116,12 +116,11 @@ fi
 
 export GROWW_KEY_INPUT
 export GROWW_SECRET_INPUT
-export ENV_FILE
-python3 - <<'PY'
+python3 - "$ENV_FILE" <<'PY'
 from pathlib import Path
-import os
+import sys
 
-env_path = Path(os.environ["ENV_FILE"])
+env_path = Path(sys.argv[1])
 key = os.environ.get("GROWW_KEY_INPUT") or ""
 secret = os.environ.get("GROWW_SECRET_INPUT") or ""
 
