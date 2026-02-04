@@ -381,10 +381,29 @@ const expiryLabel = computed(() => {
 const optionsList = computed(() => {
   const data = optionsChain.value;
   if (!data) return [];
-  if (Array.isArray(data)) return data;
-  const nested = data.options || data.data?.options || data.data?.optionChain;
-  if (Array.isArray(nested)) return nested;
-  return [];
+  let rawList = [];
+  if (Array.isArray(data)) {
+    rawList = data;
+  } else {
+    const nested = data.options || data.optionChain || data.data?.options || data.data?.optionChain;
+    if (Array.isArray(nested)) {
+      rawList = nested;
+    } else {
+      const strikes =
+        data.strikes ||
+        data.option_strikes ||
+        data.data?.strikes ||
+        data.data?.option_strikes;
+      if (strikes && typeof strikes === "object") {
+        rawList = flattenStrikeChain(strikes);
+      }
+    }
+  }
+  const normalized = rawList
+    .map((row) => normalizeOptionRow(row))
+    .filter((row) => row && row.type && row.strike !== null);
+  if (!optionType.value) return normalized;
+  return normalized.filter((row) => row.type === optionType.value);
 });
 
 const greeksFields = computed(() => {
@@ -461,6 +480,65 @@ const formatValue = (value) => {
   if (value === null || value === undefined) return "-";
   if (typeof value === "object") return "-";
   return String(value);
+};
+
+const normalizeOptionType = (value) => {
+  if (!value) return null;
+  const upper = String(value).toUpperCase();
+  if (upper === "CALL" || upper === "CE" || upper === "C") return "CALL";
+  if (upper === "PUT" || upper === "PE" || upper === "P") return "PUT";
+  return null;
+};
+
+const normalizeOptionRow = (row) => {
+  if (!row || typeof row !== "object") return null;
+  const greeks = row.greeks && typeof row.greeks === "object" ? row.greeks : {};
+  const type =
+    normalizeOptionType(row.type) ||
+    normalizeOptionType(row.optionType) ||
+    normalizeOptionType(row.option_type) ||
+    normalizeOptionType(row.right);
+  const strike =
+    row.strike ??
+    row.strikePrice ??
+    row.strike_price ??
+    (typeof row.strike === "string" ? Number(row.strike) : null);
+  return {
+    type,
+    strike: strike !== undefined && strike !== null ? Number(strike) : null,
+    ltp: row.ltp ?? row.lastTradedPrice ?? row.last_price ?? null,
+    iv: row.iv ?? row.impliedVolatility ?? row.implied_volatility ?? greeks.iv ?? null,
+    delta: row.delta ?? greeks.delta ?? null,
+    gamma: row.gamma ?? greeks.gamma ?? null,
+    theta: row.theta ?? greeks.theta ?? null,
+    vega: row.vega ?? greeks.vega ?? null,
+    rho: row.rho ?? greeks.rho ?? null,
+    trading_symbol: row.trading_symbol ?? row.tradingSymbol ?? row.symbol ?? null,
+    open_interest: row.open_interest ?? row.openInterest ?? row.oi ?? null,
+    volume: row.volume ?? row.vol ?? null,
+  };
+};
+
+const flattenStrikeChain = (strikes) => {
+  const rows = [];
+  for (const [strikeKey, sides] of Object.entries(strikes)) {
+    if (!sides || typeof sides !== "object") continue;
+    for (const [sideKey, sideData] of Object.entries(sides)) {
+      if (!sideData || typeof sideData !== "object") continue;
+      const type = sideKey === "CE" ? "CALL" : sideKey === "PE" ? "PUT" : null;
+      if (!type) continue;
+      rows.push({
+        type,
+        strike: Number(strikeKey),
+        ltp: sideData.ltp ?? null,
+        trading_symbol: sideData.trading_symbol ?? sideData.tradingSymbol ?? null,
+        open_interest: sideData.open_interest ?? sideData.openInterest ?? null,
+        volume: sideData.volume ?? null,
+        greeks: sideData.greeks ?? null,
+      });
+    }
+  }
+  return rows;
 };
 
 const pretty = (value) => {
