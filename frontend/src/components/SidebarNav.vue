@@ -29,6 +29,14 @@
         </span>
         Bearish scanner
       </button>
+      <button class="side-link" :class="{ active: view === 'indices' }" @click="setView('indices')">
+        <span class="icon-wrap info">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 18h16M6 16V8M12 16V5M18 16v-7" />
+          </svg>
+        </span>
+        Indices
+      </button>
       <button class="side-link" :class="{ active: view === 'scores' }" @click="setView('scores')">
         <span class="icon-wrap info">
           <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -1,3 +1,17 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button {
+  font: inherit;
+}
+
 h1 {
   margin: 8px 0 4px;
   font-size: 32px;
@@ -18,7 +32,7 @@ select,
 input {
   background: var(--panel);
   color: var(--text);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-subtle);
   padding: 8px 10px;
   border-radius: 8px;
 }
@@ -32,7 +46,7 @@ input {
 
 .ghost {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-subtle);
   color: var(--text);
   padding: 6px 12px;
   border-radius: 10px;
@@ -41,14 +55,14 @@ input {
 }
 
 .ghost.danger {
-  border-color: rgba(243, 111, 111, 0.4);
-  color: var(--danger);
+  border-color: hsl(var(--destructive) / 0.6);
+  color: hsl(var(--destructive));
 }
 
 .primary {
-  background: rgba(43, 213, 118, 0.2);
-  border: 1px solid rgba(43, 213, 118, 0.4);
-  color: var(--accent);
+  background: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
   padding: 8px 16px;
   border-radius: 10px;
   font-size: 12px;

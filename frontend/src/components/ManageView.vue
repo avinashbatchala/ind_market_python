@@ -20,7 +20,7 @@
             <span>Name</span>
             <span>Indices</span>
             <span>Status</span>
-            <span>Actions</span>
+            <span class="align-right">Actions</span>
           </div>
           <div v-for="row in pagedStocks" :key="row.id" class="manage-row">
             <span>{{ row.symbol }}</span>
@@ -28,8 +28,33 @@
             <span>{{ formatIndexList(row.industry_index_symbols) }}</span>
             <span>{{ row.active ? "Active" : "Paused" }}</span>
             <span class="manage-actions">
-              <button class="ghost" @click="openStockForm(row)">Edit</button>
-              <button class="ghost danger" @click="deleteStock(row.id)">Delete</button>
+              <button
+                type="button"
+                class="icon-btn edit"
+                @click="openStockForm(row)"
+                aria-label="Edit stock"
+                title="Edit stock"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="icon-btn delete"
+                @click="openDeleteConfirm(row, 'stock')"
+                aria-label="Delete stock"
+                title="Delete stock"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M6 6l1 14h10l1-14" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                </svg>
+              </button>
             </span>
           </div>
         </div>
@@ -56,7 +81,7 @@
             <span>Data Symbol</span>
             <span>Name</span>
             <span>Status</span>
-            <span>Actions</span>
+            <span class="align-right">Actions</span>
           </div>
           <div v-for="row in indices" :key="row.id" class="manage-row">
             <span>{{ row.symbol }}</span>
@@ -64,8 +89,33 @@
             <span>{{ row.name || "-" }}</span>
             <span>{{ row.active ? "Active" : "Paused" }}</span>
             <span class="manage-actions">
-              <button class="ghost" @click="openIndexForm(row)">Edit</button>
-              <button class="ghost danger" @click="deleteIndex(row.id)">Delete</button>
+              <button
+                type="button"
+                class="icon-btn edit"
+                @click="openIndexForm(row)"
+                aria-label="Edit index"
+                title="Edit index"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="icon-btn delete"
+                @click="openDeleteConfirm(row, 'index')"
+                aria-label="Delete index"
+                title="Delete index"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M6 6l1 14h10l1-14" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                </svg>
+              </button>
             </span>
           </div>
         </div>
@@ -84,7 +134,7 @@
             Name
             <input v-model="stockForm.name" placeholder="Tata Consultancy Services" />
           </label>
-          <label>
+          <label class="full-row">
             Industry indices
             <div class="checkbox-list">
               <label v-for="idx in indices" :key="idx.id" class="checkbox-row">
@@ -98,7 +148,7 @@
             </div>
             <span class="hint">NIFTY is always included by default.</span>
           </label>
-          <label class="inline">
+          <label class="inline full-row active-toggle">
             <input type="checkbox" v-model="stockForm.active" />
             Active
           </label>
@@ -137,6 +187,21 @@
         </div>
       </div>
     </section>
+
+    <section v-if="confirmDialog.show" class="modal-backdrop" @click.self="closeDeleteConfirm">
+      <div class="modal-card confirm-card" role="dialog" aria-modal="true">
+        <h3>
+          Delete {{ confirmDialog.type === "stock" ? "stock" : "index" }}?
+        </h3>
+        <p class="confirm-sub">
+          This removes {{ confirmDialog.label || "this item" }} from your lists. This action cannot be undone.
+        </p>
+        <div class="form-actions">
+          <button class="ghost" @click="closeDeleteConfirm">Cancel</button>
+          <button class="danger solid" @click="confirmDelete">Delete</button>
+        </div>
+      </div>
+    </section>
   </section>
 </template>
 
@@ -170,6 +235,12 @@ const indexForm = ref({
 });
 const stockPage = ref(1);
 const stockPageSize = ref(12);
+const confirmDialog = ref({
+  show: false,
+  type: null,
+  id: null,
+  label: "",
+});
 
 const fetchStocks = async () => {
   const res = await fetch(`${props.apiBase}/admin/stocks`);
@@ -329,6 +400,29 @@ const saveIndex = async () => {
 const deleteIndex = async (id) => {
   await fetch(`${props.apiBase}/admin/indices/${id}`, { method: "DELETE" });
   await refreshManage();
+};
+
+const openDeleteConfirm = (row, type) => {
+  confirmDialog.value = {
+    show: true,
+    type,
+    id: row.id,
+    label: row.symbol || row.name || "",
+  };
+};
+
+const closeDeleteConfirm = () => {
+  confirmDialog.value = { show: false, type: null, id: null, label: "" };
+};
+
+const confirmDelete = async () => {
+  if (!confirmDialog.value.id) return;
+  if (confirmDialog.value.type === "stock") {
+    await deleteStock(confirmDialog.value.id);
+  } else if (confirmDialog.value.type === "index") {
+    await deleteIndex(confirmDialog.value.id);
+  }
+  closeDeleteConfirm();
 };
 
 onMounted(async () => {

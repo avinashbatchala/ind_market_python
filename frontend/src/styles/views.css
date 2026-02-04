@@ -11,11 +11,16 @@
 
 .controls {
   display: grid;
-  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   align-content: start;
   align-items: stretch;
   grid-auto-rows: 1fr;
+}
+
+.indices-controls {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 220px));
+  justify-content: flex-start;
 }
 
 .filters-bar {
@@ -177,6 +182,9 @@
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 16px;
+  margin-top: 20px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .table-head {
@@ -187,9 +195,14 @@
   margin-bottom: 12px;
 }
 
+.indices .table-head {
+  margin-top: 16px;
+}
+
 .grid {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .row {
@@ -201,6 +214,11 @@
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .row.header {
@@ -278,6 +296,8 @@
 .manage-table {
   display: grid;
   gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .pagination {
@@ -292,7 +312,7 @@
 
 .manage-row {
   display: grid;
-  grid-template-columns: 1fr 1.4fr 1.2fr 0.8fr 1fr;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.4fr) minmax(160px, 1.4fr) minmax(90px, 0.8fr) minmax(140px, auto);
   gap: 8px;
   padding: 10px 12px;
   border-radius: 12px;
@@ -300,6 +320,11 @@
   background: rgba(255, 255, 255, 0.02);
   align-items: center;
   font-size: 12px;
+}
+
+.manage-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .manage-row.header {
@@ -314,6 +339,59 @@
 .manage-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.icon-btn {
+  min-width: 38px;
+  min-height: 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn.edit:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.icon-btn.delete {
+  color: var(--danger);
+  border-color: rgba(243, 111, 111, 0.5);
+  background: rgba(243, 111, 111, 0.12);
+}
+
+.icon-btn.delete:hover {
+  border-color: rgba(243, 111, 111, 0.8);
+  background: rgba(243, 111, 111, 0.2);
+}
+
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(43, 213, 118, 0.35);
+}
+
+.align-right {
+  text-align: right;
 }
 
 .manage-form {
@@ -347,23 +425,61 @@
   overflow: auto;
 }
 
+.modal-card input,
+.modal-card select {
+  background: rgba(10, 14, 18, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.modal-card input::placeholder {
+  color: rgba(141, 162, 181, 0.75);
+}
+
+.modal-card input:focus-visible,
+.modal-card select:focus-visible {
+  outline: none;
+  border-color: rgba(43, 213, 118, 0.7);
+  box-shadow: 0 0 0 3px rgba(43, 213, 118, 0.25);
+}
+
 .checkbox-list {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 20, 26, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 14, 18, 0.6);
   max-height: 220px;
   overflow-y: auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .checkbox-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--text);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+}
+
+.checkbox-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.checkbox-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  margin: 0;
 }
 
 .form-grid {
@@ -372,11 +488,20 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.form-grid .full-row {
+  grid-column: 1 / -1;
+}
+
+.active-toggle {
+  justify-content: flex-start;
+}
+
 .form-grid label {
   display: grid;
   gap: 6px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .form-grid label.inline {
@@ -388,6 +513,32 @@
 .form-actions {
   display: flex;
   gap: 10px;
+}
+
+.confirm-card {
+  max-width: 460px;
+}
+
+.confirm-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.danger.solid {
+  background: rgba(243, 111, 111, 0.2);
+  border: 1px solid rgba(243, 111, 111, 0.7);
+  color: var(--danger);
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.danger.solid:hover {
+  background: rgba(243, 111, 111, 0.3);
+  border-color: rgba(243, 111, 111, 0.9);
 }
 
 .scores-hero {
@@ -477,16 +628,8 @@
     overflow-x: auto;
   }
 
-  .grid {
-    min-width: 520px;
-  }
-
   .manage-table {
     overflow-x: auto;
-  }
-
-  .manage-row {
-    min-width: 640px;
   }
 }
 
@@ -503,6 +646,19 @@
   .scores-hero,
   .hero {
     padding: 18px;
+  }
+
+  .manage-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .manage-row.header {
+    display: none;
+  }
+
+  .manage-actions {
+    justify-content: flex-start;
   }
 }
 

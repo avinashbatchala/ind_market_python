@@ -8,7 +8,6 @@
         :scanner-title="scannerTitle"
         :timeframes="timeframes"
         :range-bounds="rangeBounds"
-        :benchmark-cards="benchmarkCards"
         :filtered-rows="filteredRows"
         :last-updated="lastUpdated"
         v-model:timeframe="timeframe"
@@ -19,6 +18,14 @@
         v-model:rrvMax="rrvMax"
         v-model:rveMin="rveMin"
         v-model:rveMax="rveMax"
+      />
+
+      <IndicesView
+        v-else-if="view === 'indices'"
+        :timeframes="timeframes"
+        :benchmark-cards="benchmarkCards"
+        :last-updated="benchUpdated"
+        v-model:timeframe="timeframe"
       />
 
       <ScoresView v-else-if="view === 'scores'" />
@@ -32,6 +39,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import ScannerView from "./components/ScannerView.vue";
+import IndicesView from "./components/IndicesView.vue";
 import ScoresView from "./components/ScoresView.vue";
 import ManageView from "./components/ManageView.vue";
 
@@ -50,6 +58,7 @@ const view = ref("bullish");
 const rows = ref([]);
 const benchmarks = ref([]);
 const lastUpdated = ref("-");
+const benchUpdated = ref("-");
 let socket = null;
 let hashListener = null;
 
@@ -68,6 +77,7 @@ const fetchBenchmarks = async () => {
   if (!res.ok) return;
   const data = await res.json();
   benchmarks.value = data.states || [];
+  benchUpdated.value = data.ts || "-";
 };
 
 const connectWS = () => {
@@ -107,7 +117,7 @@ const setView = (next) => {
 const syncFromHash = () => {
   if (typeof window === "undefined") return;
   const hash = window.location.hash.replace("#", "");
-  if (hash === "bearish" || hash === "scores" || hash === "bullish" || hash === "manage") {
+  if (hash === "bearish" || hash === "scores" || hash === "bullish" || hash === "manage" || hash === "indices") {
     view.value = hash;
   } else {
     view.value = "bullish";
@@ -163,12 +173,23 @@ const clampRange = (minRef, maxRef) => {
 };
 
 watch(timeframe, async () => {
-  await refreshScanner();
+  if (view.value === "bullish" || view.value === "bearish") {
+    await refreshScanner();
+    return;
+  }
+  if (view.value === "indices") {
+    await fetchBenchmarks();
+  }
 });
 
 watch(view, async (next) => {
   if (next === "scores" || next === "manage") {
     stopWS();
+    return;
+  }
+  if (next === "indices") {
+    stopWS();
+    await fetchBenchmarks();
     return;
   }
   signalFilter.value = "ALL";
@@ -183,7 +204,9 @@ onMounted(async () => {
   syncFromHash();
   hashListener = () => syncFromHash();
   window.addEventListener("hashchange", hashListener);
-  if (view.value !== "scores" && view.value !== "manage") {
+  if (view.value === "indices") {
+    await fetchBenchmarks();
+  } else if (view.value !== "scores" && view.value !== "manage") {
     await refreshScanner();
   }
 });

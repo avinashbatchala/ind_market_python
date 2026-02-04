@@ -105,29 +105,6 @@
       </div>
     </section>
 
-    <section class="benchmarks">
-      <div v-for="card in benchmarkCards" :key="card.benchmark" class="card">
-        <div class="card-head">
-          <span class="tag">{{ card.benchmark }}</span>
-          <span class="badge" :class="card.regime.toLowerCase()">{{ card.regime }}</span>
-        </div>
-        <div class="card-body">
-          <div>
-            <p class="metric">Trend</p>
-            <h3>{{ formatNum(card.trend) }}</h3>
-          </div>
-          <div>
-            <p class="metric">Vol Expansion</p>
-            <h3>{{ formatNum(card.vol_expansion) }}</h3>
-          </div>
-          <div>
-            <p class="metric">Participation</p>
-            <h3>{{ formatNum(card.participation) }}</h3>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="table">
       <div class="table-head">
         <p>Updated: {{ lastUpdated }}</p>
@@ -170,7 +147,6 @@ const props = defineProps({
   rrvMax: { type: Number, required: true },
   rveMin: { type: Number, required: true },
   rveMax: { type: Number, required: true },
-  benchmarkCards: { type: Array, required: true },
   filteredRows: { type: Array, required: true },
   lastUpdated: { type: String, required: true },
 });
